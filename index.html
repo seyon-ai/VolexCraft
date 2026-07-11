@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>VoxelCraft — Browser Voxel Game</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+</head>
+<body>
+
+<div id="canvas-container"></div>
+
+<!-- ===================== MAIN MENU ===================== -->
+<div id="main-menu" class="overlay">
+  <div class="menu-panel">
+    <h1 class="game-title">VOXEL<span>CRAFT</span></h1>
+    <p class="menu-subtitle">an infinite blocky world, in your browser</p>
+
+    <div class="menu-field">
+      <label for="seed-input">World seed</label>
+      <input id="seed-input" type="text" placeholder="leave blank for random" autocomplete="off" />
+    </div>
+
+    <div class="menu-field">
+      <label for="mode-select">Game mode</label>
+      <select id="mode-select">
+        <option value="survival">Survival</option>
+        <option value="creative">Creative</option>
+      </select>
+    </div>
+
+    <button id="btn-new-world" class="menu-button primary">New World</button>
+    <button id="btn-continue" class="menu-button">Continue Saved World</button>
+
+    <p class="menu-hint">WASD move · Mouse look · Space jump · Shift sprint · Left-click break · Right-click place · E toggle mode · Double-tap Space to fly (Creative) · F3 debug</p>
+  </div>
+</div>
+
+<!-- ===================== HUD ===================== -->
+<div id="hud" style="display:none;">
+  <div id="crosshair"></div>
+
+  <div id="top-bar">
+    <div id="top-bar-left">
+      <div id="health-container"><div id="hearts"></div></div>
+      <div id="status-labels">
+        <span id="mode-label">Survival</span>
+        <span class="dot">•</span>
+        <span id="time-label">Day</span>
+      </div>
+    </div>
+    <button id="btn-pause" class="icon-button" aria-label="Pause">II</button>
+  </div>
+
+  <div id="debug-panel"></div>
+
+  <div id="hotbar"></div>
+</div>
+
+<!-- ===================== PAUSE / SETTINGS ===================== -->
+<div id="pause-overlay" class="overlay" style="display:none;">
+  <div class="menu-panel">
+    <h2>Paused</h2>
+
+    <div class="settings-row">
+      <label>Render distance <span id="render-distance-value">5</span></label>
+      <input id="render-distance" type="range" min="2" max="10" step="1" value="5" />
+    </div>
+    <div class="settings-row">
+      <label><input id="shadows-toggle" type="checkbox" checked /> Shadows</label>
+    </div>
+    <div class="settings-row">
+      <label><input id="fog-toggle" type="checkbox" checked /> Distance fog</label>
+    </div>
+    <div class="settings-row">
+      <label>Mouse sensitivity</label>
+      <input id="sensitivity-slider" type="range" min="0.5" max="2.5" step="0.1" value="1" />
+    </div>
+
+    <button id="btn-resume" class="menu-button primary">Resume</button>
+    <button id="btn-save-quit" class="menu-button">Save &amp; Quit to Menu</button>
+  </div>
+</div>
+
+<!-- ===================== DEATH SCREEN ===================== -->
+<div id="death-overlay" class="overlay" style="display:none;">
+  <div class="menu-panel">
+    <h2 class="death-title">You Died</h2>
+    <button id="btn-respawn" class="menu-button primary">Respawn</button>
+  </div>
+</div>
+
+<!-- ===================== MOBILE CONTROLS ===================== -->
+<div id="mobile-controls" style="display:none;">
+  <div id="joystick-zone"><div id="joystick-thumb"></div></div>
+  <div id="action-buttons">
+    <button id="btn-break" class="touch-button">Break</button>
+    <button id="btn-place" class="touch-button">Place</button>
+    <button id="btn-jump" class="touch-button jump">Jump</button>
+  </div>
+</div>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

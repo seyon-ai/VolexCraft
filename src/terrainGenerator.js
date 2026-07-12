@@ -96,4 +96,50 @@ export class TerrainGenerator {
     if (biome === Biome.DESERT || biome === Biome.BEACH) return BlockId.SAND;
     return BlockId.DIRT;
   }
+
+  /** Deterministic 0..1 roll for a specific voxel coordinate (ore placement, decoration). */
+  voxelRoll(x, y, z, salt = 0) {
+    return mulberry32((this.seed ^ (x * 374761393) ^ (y * 668265263) ^ (z * 2147483647) ^ salt) >>> 0)();
+  }
+
+  /** Returns an ore BlockId to substitute for stone at this coordinate, or null. Depth-banded rarity. */
+  pickOre(x, y, z) {
+    const r = this.voxelRoll(x, y, z, 11);
+    if (y < 16) {
+      if (r < 0.004) return BlockId.DIAMOND_ORE;
+      if (r < 0.010) return BlockId.GOLD_ORE;
+      if (r < 0.018) return BlockId.REDSTONE_ORE;
+      if (r < 0.024) return BlockId.EMERALD_ORE;
+      if (r < 0.07) return BlockId.IRON_ORE;
+      if (r < 0.12) return BlockId.COAL_ORE;
+      return null;
+    }
+    if (y < 40) {
+      if (r < 0.006) return BlockId.GOLD_ORE;
+      if (r < 0.012) return BlockId.REDSTONE_ORE;
+      if (r < 0.016) return BlockId.EMERALD_ORE;
+      if (r < 0.055) return BlockId.IRON_ORE;
+      if (r < 0.10) return BlockId.COAL_ORE;
+      return null;
+    }
+    if (r < 0.02) return BlockId.IRON_ORE;
+    if (r < 0.06) return BlockId.COAL_ORE;
+    return null;
+  }
+
+  /** Surface decoration (flowers, tall grass, cactus, pumpkin) for a column that isn't a tree. */
+  decorationAt(x, z, biome, height) {
+    const r = this.voxelRoll(x, height + 1, z, 22);
+    if (biome === Biome.DESERT) {
+      return r < 0.012 ? BlockId.CACTUS : null;
+    }
+    if (biome === Biome.PLAINS || biome === Biome.FOREST) {
+      if (r < 0.0015) return BlockId.PUMPKIN;
+      if (r < 0.045) return BlockId.FLOWER_RED;
+      if (r < 0.085) return BlockId.FLOWER_YELLOW;
+      if (r < 0.22) return BlockId.TALL_GRASS;
+      return null;
+    }
+    return null;
+  }
 }

@@ -13,11 +13,17 @@ import { UI } from './ui.js';
 import { DesktopControls } from './controls.js';
 import { MobileControls } from './mobileControls.js';
 import { SaveSystem } from './saveSystem.js';
-import { BlockId } from './block.js';
+import { BlockId, dropFor, isUnbreakable, requiredPickaxeTier, interactiveKind } from './block.js';
+import { pickaxeTier, weaponDamage } from './items.js';
+import { MobManager } from './mobs.js';
+import { CRAFTING_RECIPES, SMELTING_RECIPES, craftOnce, smeltOnce } from './crafting.js';
 import { GraphicsSettings, WorldSettings, isMobileDevice } from './settings.js';
 import { hashStringSeed } from './utils.js';
 
-const BREAK_TIME_SURVIVAL = 0.35; // seconds to break a block by hand
+const BREAK_TIME_SURVIVAL = 0.35; // seconds to break a block by hand in Survival
+const CREATIVE_BREAK_INTERVAL = 0.15; // seconds between breaks while held in Creative (rate cap, not instant-infinite)
+const ATTACK_COOLDOWN = 0.45; // seconds between melee swings
+const ATTACK_RANGE = 4;
 
 class Game {
   constructor() {
@@ -41,7 +47,9 @@ class Game {
 
     this._breakProgress = 0;
     this._breakTargetKey = null;
-    this._prevBreakHeld = false;
+    this._breakFraction = 0;
+    this._attackCooldownTimer = 0;
+    this._openPanel = null; // 'crafting' | 'furnace' | null
     this._fpsAccum = 0;
     this._fpsFrames = 0;
     this._fps = 0;
@@ -62,6 +70,13 @@ class Game {
       onFogChange: (v) => this._setFog(v),
       onSensitivityChange: (v) => this._setSensitivity(v),
     });
+
+    this.ui.bindHotbarSelection((index) => {
+      if (this.inventory) this.inventory.select(index);
+    });
+
+    this.ui.bindCraftingClose(() => this._closePanel());
+    this.ui.bindFurnaceClose(() => this._closePanel());
 
     document.addEventListener('keydown', (e) => {
       if (e.code === 'F3') { this._debugVisible = !this._debugVisible; this.ui.dom.debugPanel.classList.toggle('visible', this._debugVisible); }
@@ -146,6 +161,7 @@ class Game {
     this.player = new Player(this.world);
     this.inventory = new Inventory(this.gameMode);
     this.timeSystem = new TimeSystem(this.scene);
+    this.mobManager = new MobManager(this.scene, this.world);
 
     this.gameMode.onChange((m) => {
       this.player.flying = false;
@@ -164,8 +180,12 @@ class Game {
   _teardownWorld() {
     for (const chunk of this.world.chunks.values()) chunk.dispose();
     if (this.timeSystem) {
-      this.scene.remove(this.timeSystem.sunLight, this.timeSystem.sunLight.target, this.timeSystem.moonLight, this.timeSystem.ambientLight);
+      this.scene.remove(
+        this.timeSystem.sunLight, this.timeSystem.sunLight.target, this.timeSystem.moonLight,
+        this.timeSystem.ambientLight, this.timeSystem.sunSprite, this.timeSystem.moonSprite, this.timeSystem.stars
+      );
     }
+    if (this.mobManager) this.mobManager.disposeAll();
   }
 
   _afterWorldReady() {
@@ -225,6 +245,38 @@ class Game {
     this._sensitivityMultiplier = multiplier; // applied at input-poll time
   }
 
+  _openCraftingPanel() {
+    this._openPanel = 'crafting';
+    this._renderCraftingPanel();
+    this.ui.showCraftingPanel();
+    if (!this.mobile) document.exitPointerLock();
+  }
+
+  _openFurnacePanel() {
+    this._openPanel = 'furnace';
+    this._renderFurnacePanel();
+    this.ui.showFurnacePanel();
+    if (!this.mobile) document.exitPointerLock();
+  }
+
+  _renderCraftingPanel() {
+    this.ui.renderRecipeList(this.ui.dom.craftingList, CRAFTING_RECIPES, this.inventory, 'Craft', (recipe) => {
+      if (craftOnce(this.inventory, recipe)) this._renderCraftingPanel();
+    });
+  }
+
+  _renderFurnacePanel() {
+    this.ui.renderRecipeList(this.ui.dom.furnaceList, SMELTING_RECIPES, this.inventory, 'Smelt', (recipe) => {
+      if (smeltOnce(this.inventory, recipe)) this._renderFurnacePanel();
+    });
+  }
+
+  _closePanel() {
+    this._openPanel = null;
+    this.ui.hideCraftingPanel();
+    this.ui.hideFurnacePanel();
+  }
+
   // ---------------- player-triggered actions ----------------
 
   onToggleFlyRequested() {
@@ -252,7 +304,7 @@ class Game {
 
     this._trackFps(dt);
 
-    if (this.running && !this.paused) {
+    if (this.running && !this.paused && !this._openPanel) {
       this._update(dt);
       this._maybeAutosave();
     }
@@ -299,12 +351,17 @@ class Game {
 
     this.world.update(this.player.position.x, this.player.position.z);
     this.timeSystem.update(dt, this.player.position);
+    this.player.gameModeCanTakeDamage = this.gameMode.canTakeDamage();
+    this.mobManager.update(dt, this.player, this.timeSystem.isNight(), (mob) => {
+      if (this.gameMode.isSurvival() && mob.def.drop) this.inventory.addItem(mob.def.drop, 1);
+    });
 
     this._updateTargetedBlock(input, dt);
 
     this.ui.updateHealth(this.player.health, this.player.maxHealth, this.gameMode.isSurvival());
     this.ui.updateHotbar(this.inventory);
     this.ui.updateTimeLabel(this.timeSystem.getPhaseLabel());
+    this.ui.updateBreakProgress(this._breakFraction || 0);
     if (this._debugVisible) {
       const p = this.player.position;
       const biome = this.world.terrainGenerator.getBiome(Math.floor(p.x), Math.floor(p.z), this.world.getHeightAt(p.x, p.z));
@@ -331,43 +388,65 @@ class Game {
       this.outline.visible = false;
     }
 
-    this._handleBreakPlace(hit, input, dt);
+    this._handleBreakPlace(hit, input, dt, dir);
   }
 
-  _handleBreakPlace(hit, input, dt) {
-    if (hit && input.breakHeld) {
+  _handleBreakPlace(hit, input, dt, facing) {
+    this._attackCooldownTimer -= dt;
+
+    const eye = this.player.getEyePosition();
+    const mobTarget = this.mobManager.findAttackTarget(eye, facing, ATTACK_RANGE);
+
+    if (mobTarget && input.breakHeld) {
+      this._breakProgress = 0;
+      this._breakFraction = 0;
+      this._breakTargetKey = null;
+      if (this._attackCooldownTimer <= 0) {
+        const dmg = weaponDamage(this.inventory.getSelectedBlockId());
+        const knock = mobTarget.position.clone().sub(this.player.position).setY(0).normalize();
+        mobTarget.takeDamage(dmg, knock);
+        this._attackCooldownTimer = ATTACK_COOLDOWN;
+      }
+    } else if (hit && input.breakHeld && !isUnbreakable(hit.blockId)) {
       const key = hit.position.join(',');
-      if (this.gameMode.breaksInstantly()) {
-        if (!this._prevBreakHeld) this._breakBlock(hit);
-      } else {
-        if (key !== this._breakTargetKey) { this._breakTargetKey = key; this._breakProgress = 0; }
-        this._breakProgress += dt;
-        if (this._breakProgress >= BREAK_TIME_SURVIVAL) {
-          this._breakBlock(hit);
-          this._breakProgress = 0;
-          this._breakTargetKey = null;
-        }
+      const interval = this.gameMode.breaksInstantly() ? CREATIVE_BREAK_INTERVAL : BREAK_TIME_SURVIVAL;
+      if (key !== this._breakTargetKey) { this._breakTargetKey = key; this._breakProgress = 0; }
+      this._breakProgress += dt;
+      this._breakFraction = Math.min(1, this._breakProgress / interval);
+      if (this._breakProgress >= interval) {
+        this._breakBlock(hit);
+        this._breakProgress = 0;
+        this._breakFraction = 0;
       }
     } else {
       this._breakProgress = 0;
+      this._breakFraction = 0;
       this._breakTargetKey = null;
     }
-    this._prevBreakHeld = input.breakHeld;
 
     if (hit && input.placePressed) {
-      this._placeBlock(hit);
+      const kind = interactiveKind(hit.blockId);
+      if (kind === 'crafting') this._openCraftingPanel();
+      else if (kind === 'furnace') this._openFurnacePanel();
+      else this._placeBlock(hit);
     }
   }
 
   _breakBlock(hit) {
     const [x, y, z] = hit.position;
     this.world.setBlock(x, y, z, BlockId.AIR);
-    if (this.gameMode.isSurvival()) this.inventory.addBlock(hit.blockId, 1);
+    if (this.gameMode.isSurvival()) {
+      const requiredTier = requiredPickaxeTier(hit.blockId);
+      const haveTier = pickaxeTier(this.inventory.getSelectedBlockId());
+      if (requiredTier === 0 || haveTier >= requiredTier) {
+        this.inventory.addItem(dropFor(hit.blockId), 1);
+      }
+    }
   }
 
   _placeBlock(hit) {
     const blockId = this.inventory.getSelectedBlockId();
-    if (blockId === null || blockId === undefined) return;
+    if (blockId === null || blockId === undefined || blockId >= 1000) return; // tools/materials aren't placeable
 
     const [nx, ny, nz] = hit.normal;
     const px = hit.position[0] + nx, py = hit.position[1] + ny, pz = hit.position[2] + nz;

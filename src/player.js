@@ -82,6 +82,40 @@ export class Player {
     return false;
   }
 
+  /**
+   * Horizontal move with auto-step: if walking into a ledge exactly one
+   * block tall would otherwise stop the player dead, hop the player up
+   * onto it instead (classic "auto-jump" convenience for voxel games).
+   */
+  moveAxisWithStep(axis, delta) {
+    if (delta === 0) return false;
+    const originalAxisPos = this.position[axis];
+    const originalY = this.position.y;
+
+    const blocked = this.moveAxis(axis, delta);
+    if (!blocked) return false;
+    if (this.flying || !this.onGround) return true; // no auto-step mid-air or while flying
+
+    // Retry from one step higher; if that clears the obstruction, keep it —
+    // gravity will settle the player onto the ledge over the next frames.
+    this.position[axis] = originalAxisPos;
+    this.position.y = originalY + PlayerSettings.stepHeight;
+    if (this.aabbIntersectsWorld(this.getAABB())) {
+      this.position.y = originalY;
+      this.position[axis] = originalAxisPos;
+      this.moveAxis(axis, delta);
+      return true;
+    }
+    const blockedAtStep = this.moveAxis(axis, delta);
+    if (blockedAtStep) {
+      this.position.y = originalY;
+      this.position[axis] = originalAxisPos;
+      this.moveAxis(axis, delta);
+      return true;
+    }
+    return false;
+  }
+
   update(dt, wishDirection, jumpPressed, gameMode) {
     if (this.isDead) return;
     const settings = PlayerSettings;
@@ -114,8 +148,8 @@ export class Player {
       }
     }
 
-    const collidedX = this.moveAxis('x', this.velocity.x * dt);
-    const collidedZ = this.moveAxis('z', this.velocity.z * dt);
+    const collidedX = this.moveAxisWithStep('x', this.velocity.x * dt);
+    const collidedZ = this.moveAxisWithStep('z', this.velocity.z * dt);
     if (collidedX) this.velocity.x = 0;
     if (collidedZ) this.velocity.z = 0;
 

@@ -2,8 +2,8 @@
 // directly; it calls methods here, keeping rendering/physics code free of
 // UI concerns (and making the HUD easy to restyle independently).
 
-import { BlockRegistry } from './block.js';
 import { WorldSettings } from './settings.js';
+import { ItemRegistry, isItem } from './items.js';
 
 export class UI {
   constructor() {
@@ -19,6 +19,7 @@ export class UI {
       hearts: document.getElementById('hearts'),
       healthContainer: document.getElementById('health-container'),
       crosshair: document.getElementById('crosshair'),
+      breakRing: document.getElementById('break-ring'),
       debugPanel: document.getElementById('debug-panel'),
       modeLabel: document.getElementById('mode-label'),
       timeLabel: document.getElementById('time-label'),
@@ -36,13 +37,19 @@ export class UI {
       deathOverlay: document.getElementById('death-overlay'),
       respawnBtn: document.getElementById('btn-respawn'),
 
+      craftingOverlay: document.getElementById('crafting-overlay'),
+      craftingList: document.getElementById('crafting-recipe-list'),
+      closeCraftingBtn: document.getElementById('btn-close-crafting'),
+      furnaceOverlay: document.getElementById('furnace-overlay'),
+      furnaceList: document.getElementById('furnace-recipe-list'),
+      closeFurnaceBtn: document.getElementById('btn-close-furnace'),
+
       mobileControls: document.getElementById('mobile-controls'),
       joystickZone: document.getElementById('joystick-zone'),
+      joystickBase: document.getElementById('joystick-base'),
       joystickThumb: document.getElementById('joystick-thumb'),
-      lookZone: document.getElementById('look-zone'),
       btnJump: document.getElementById('btn-jump'),
-      btnBreak: document.getElementById('btn-break'),
-      btnPlace: document.getElementById('btn-place'),
+      btnAction: document.getElementById('btn-action'),
       canvasContainer: document.getElementById('canvas-container'),
     };
 
@@ -81,11 +88,10 @@ export class UI {
       const { root, label } = this.hotbarSlotEls[i];
       root.classList.toggle('selected', i === inventory.selectedIndex);
       if (slot) {
-        const def = BlockRegistry[slot.blockId];
-        root.style.setProperty('--swatch', blockSwatchColor(slot.blockId));
+        root.style.setProperty('--swatch', swatchColorFor(slot.id));
         root.classList.add('filled');
         label.textContent = slot.count === Infinity ? '' : String(slot.count);
-        root.title = def.name;
+        root.title = inventory.itemName(slot.id);
       } else {
         root.classList.remove('filled');
         root.style.removeProperty('--swatch');
@@ -117,6 +123,11 @@ export class UI {
     this.dom.timeLabel.textContent = phaseLabel;
   }
 
+  updateBreakProgress(fraction) {
+    this.dom.breakRing.classList.toggle('active', fraction > 0);
+    this.dom.breakRing.style.setProperty('--progress', String(fraction));
+  }
+
   updateDebugPanel(text) {
     this.dom.debugPanel.textContent = text;
   }
@@ -142,6 +153,55 @@ export class UI {
 
   showDeathScreen() { this.dom.deathOverlay.style.display = 'flex'; }
   hideDeathScreen() { this.dom.deathOverlay.style.display = 'none'; }
+
+  bindCraftingClose(onClose) { this.dom.closeCraftingBtn.addEventListener('click', onClose); }
+  bindFurnaceClose(onClose) { this.dom.closeFurnaceBtn.addEventListener('click', onClose); }
+
+  showCraftingPanel() { this.dom.craftingOverlay.style.display = 'flex'; }
+  hideCraftingPanel() { this.dom.craftingOverlay.style.display = 'none'; }
+  showFurnacePanel() { this.dom.furnaceOverlay.style.display = 'flex'; }
+  hideFurnacePanel() { this.dom.furnaceOverlay.style.display = 'none'; }
+
+  /** Renders a recipe list (shared by crafting table and furnace panels). */
+  renderRecipeList(listEl, recipes, inventory, actionLabel, onAction) {
+    listEl.innerHTML = '';
+    for (const recipe of recipes) {
+      const card = document.createElement('div');
+      card.className = 'recipe-card';
+
+      const info = document.createElement('div');
+      info.className = 'recipe-info';
+      const swatch = document.createElement('div');
+      swatch.className = 'recipe-swatch';
+      swatch.style.background = swatchColorFor(recipe.result.id);
+      info.appendChild(swatch);
+
+      const text = document.createElement('div');
+      const title = document.createElement('div');
+      title.textContent = `${inventory.itemName(recipe.result.id)} x${recipe.result.count}`;
+      const needs = document.createElement('div');
+      needs.className = 'recipe-needs';
+      needs.innerHTML = recipe.needs.map((n) => {
+        const have = inventory.countItem(n.id);
+        const short = have < n.count;
+        return `<span class="${short ? 'short' : ''}">${inventory.itemName(n.id)} ${have}/${n.count}</span>`;
+      }).join(' &nbsp; ');
+      text.appendChild(title);
+      text.appendChild(needs);
+      info.appendChild(text);
+
+      const btn = document.createElement('button');
+      btn.className = 'recipe-make-btn';
+      btn.textContent = actionLabel;
+      const ok = hasAll(inventory, recipe.needs);
+      btn.disabled = !ok;
+      btn.addEventListener('click', () => onAction(recipe));
+
+      card.appendChild(info);
+      card.appendChild(btn);
+      listEl.appendChild(card);
+    }
+  }
 
   showMobileControls(show) {
     this.dom.mobileControls.style.display = show ? 'block' : 'none';
@@ -184,21 +244,33 @@ export class UI {
 
   getMobileElements() {
     return {
-      root: this.dom.mobileControls,
       joystickZone: this.dom.joystickZone,
+      joystickBase: this.dom.joystickBase,
       joystickThumb: this.dom.joystickThumb,
       lookZone: this.dom.canvasContainer,
       btnJump: this.dom.btnJump,
-      btnBreak: this.dom.btnBreak,
-      btnPlace: this.dom.btnPlace,
+      btnAction: this.dom.btnAction,
     };
   }
 }
 
-function blockSwatchColor(blockId) {
+function swatchColorFor(id) {
+  if (isItem(id)) {
+    const display = ItemRegistry[id]?.display;
+    return display ? display.color : '#999';
+  }
   const colors = {
-    1: '#5a9e3c', 2: '#78543c', 3: '#828286', 4: '#e0cb8e',
-    6: '#67482a', 7: '#3a7830', 9: '#e8eef8',
+    1: '#5a9e3c', 2: '#78543c', 3: '#828286', 4: '#e0cb8e', 5: '#3e78c4',
+    6: '#67482a', 7: '#3a7830', 9: '#e8eef8', 10: '#7a7a7e', 11: '#b08850',
+    12: '#c8e1e8', 13: '#7e7a76', 14: '#a0a4ae', 15: '#28282a', 16: '#d8b28c',
+    17: '#f4d040', 18: '#66e0e0', 19: '#d22020', 20: '#30c46e', 21: '#b08850',
+    22: '#78787c', 23: '#964838', 24: '#d8c696', 25: '#5a785a', 26: '#b0d6eb',
+    27: '#c47820', 28: '#3a8442', 29: '#58a03c', 30: '#d23434', 31: '#e8d030',
+    32: '#d8d6d0', 33: '#f8d448', 34: '#78e8e8',
   };
-  return colors[blockId] || '#999';
+  return colors[id] || '#999';
+}
+
+function hasAll(inventory, needs) {
+  return needs.every((n) => inventory.countItem(n.id) >= n.count);
 }

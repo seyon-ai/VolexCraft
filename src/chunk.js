@@ -74,12 +74,27 @@ export class Chunk {
           if (y === 0) id = BlockId.BEDROCK;
           else if (y === height) id = surface;
           else if (y > height - 4) id = subSurface;
-          else id = BlockId.STONE;
+          else id = terrainGenerator.pickOre(wx, y, wz) || BlockId.STONE;
           this.setBlockLocal(lx, y, lz, id);
         }
         // Fill water up to sea level over anything lower (oceans/lakes).
         for (let y = height + 1; y <= WorldSettings.SEA_LEVEL; y++) {
           this.setBlockLocal(lx, y, lz, BlockId.WATER);
+        }
+      }
+    }
+
+    // Surface decoration (flowers/grass/cactus/pumpkin) — skipped on columns
+    // that will grow a tree, and only above sea level.
+    for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+      for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+        const wx = ox + lx;
+        const wz = oz + lz;
+        const { height, biome, tree } = terrainGenerator.getColumn(wx, wz);
+        if (tree || height <= WorldSettings.SEA_LEVEL) continue;
+        const deco = terrainGenerator.decorationAt(wx, wz, biome, height);
+        if (deco !== null && this.getBlockLocal(lx, height + 1, lz) === BlockId.AIR) {
+          this.setBlockLocal(lx, height + 1, lz, deco);
         }
       }
     }

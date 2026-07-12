@@ -101,6 +101,24 @@ html, body {
 
 .death-title { font-family: var(--pixel-font); font-size: 22px; color: var(--danger); text-shadow: 3px 3px 0 rgba(0,0,0,0.5); }
 
+.menu-panel.wide { min-width: 340px; max-width: 480px; }
+
+.recipe-list { max-height: 50vh; overflow-y: auto; margin: 12px 0; display: flex; flex-direction: column; gap: 8px; }
+.recipe-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: rgba(255,255,255,0.05); border: 2px solid var(--stone-dark); padding: 8px 10px;
+  text-align: left;
+}
+.recipe-info { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.recipe-swatch { width: 22px; height: 22px; flex-shrink: 0; box-shadow: inset -2px -2px 0 rgba(0,0,0,0.25), inset 2px 2px 0 rgba(255,255,255,0.2); }
+.recipe-needs { font-size: 10px; opacity: 0.75; }
+.recipe-needs .short { color: var(--danger); opacity: 1; }
+.recipe-make-btn {
+  padding: 6px 12px; font-size: 11px; font-weight: 700; font-family: var(--body-font); color: var(--ink);
+  background: linear-gradient(var(--grass), var(--grass-dark)); border: none; cursor: pointer; flex-shrink: 0;
+}
+.recipe-make-btn:disabled { background: linear-gradient(#555, #333); cursor: not-allowed; opacity: 0.6; }
+
 /* ---------- HUD ---------- */
 
 #hud { position: absolute; inset: 0; z-index: 10; pointer-events: none; }
@@ -115,6 +133,15 @@ html, body {
 }
 #crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; }
 #crosshair::after { top: 8px; left: 0; width: 18px; height: 2px; }
+#break-ring {
+  position: absolute; top: -9px; left: -9px; width: 36px; height: 36px;
+  border-radius: 50%;
+  background: conic-gradient(rgba(255,255,255,0.9) calc(var(--progress, 0) * 360deg), transparent 0);
+  -webkit-mask: radial-gradient(closest-side, transparent 78%, black 80%);
+  mask: radial-gradient(closest-side, transparent 78%, black 80%);
+  opacity: 0;
+}
+#break-ring.active { opacity: 1; }
 
 #top-bar {
   position: absolute; top: 14px; left: 0; right: 0;
@@ -182,21 +209,27 @@ html, body {
 
 #mobile-controls { position: absolute; inset: 0; z-index: 20; pointer-events: none; }
 
+/* Large invisible hit-zone: touching anywhere in the bottom-left ~half of
+   the screen summons the joystick right where the thumb landed. */
 #joystick-zone {
-  position: absolute; left: 24px; bottom: 24px; width: 110px; height: 110px;
-  border-radius: 50%; background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.25);
+  position: absolute; left: 0; bottom: 0; width: 58%; height: 68%;
   pointer-events: auto; touch-action: none;
 }
-#joystick-thumb {
-  position: absolute; top: 50%; left: 50%; width: 46px; height: 46px;
+#joystick-base {
+  position: fixed; width: 130px; height: 130px;
   transform: translate(-50%, -50%);
-  border-radius: 50%; background: rgba(255,255,255,0.35); border: 2px solid rgba(255,255,255,0.5);
+  border-radius: 50%; background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.3);
+  opacity: 0; pointer-events: none; transition: opacity 0.1s;
+}
+#joystick-thumb {
+  position: absolute; top: 50%; left: 50%; width: 56px; height: 56px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%; background: rgba(255,255,255,0.4); border: 2px solid rgba(255,255,255,0.55);
 }
 
 #action-buttons {
-  position: absolute; right: 18px; bottom: 20px;
-  display: grid; grid-template-columns: 64px 64px; grid-template-rows: 56px 56px;
-  gap: 10px; align-items: end;
+  position: absolute; right: 22px; bottom: 24px;
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
   pointer-events: none;
 }
 .touch-button {
@@ -205,7 +238,15 @@ html, body {
   background: rgba(20,16,10,0.7); border: 2px solid rgba(255,255,255,0.25);
   box-shadow: inset 1px 1px 0 rgba(255,255,255,0.15);
 }
-.touch-button.jump { grid-column: 1 / span 2; }
+.touch-button.jump { width: 72px; height: 44px; }
+.touch-button.action-btn {
+  width: 76px; height: 76px; border-radius: 50%;
+  background: rgba(217,79,79,0.35); border: 3px solid rgba(255,255,255,0.4);
+  position: relative;
+}
+.touch-button.action-btn::after {
+  content: 'Tap: place\A Hold: break'; white-space: pre; font-size: 9px; line-height: 1.3;
+}
 
 @media (orientation: portrait) {
   .menu-hint { display: none; }

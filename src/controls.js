@@ -57,7 +57,10 @@ export class DesktopControls {
         if (n >= 1 && n <= 9) this.game.inventory.select(n - 1);
       }
       if (e.code === 'KeyE') this.game.onToggleGameModeRequested();
-      if (e.code === 'Escape') document.exitPointerLock();
+      if (e.code === 'Escape') {
+        if (this.game._openPanel) this.game._closePanel();
+        else document.exitPointerLock();
+      }
     });
 
     document.addEventListener('keyup', (e) => {

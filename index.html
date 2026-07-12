@@ -41,13 +41,13 @@
     <button id="btn-new-world" class="menu-button primary">New World</button>
     <button id="btn-continue" class="menu-button">Continue Saved World</button>
 
-    <p class="menu-hint">WASD move · Mouse look · Space jump · Shift sprint · Left-click break · Right-click place · E toggle mode · Double-tap Space to fly (Creative) · F3 debug</p>
+    <p class="menu-hint">WASD move · Mouse look · Space jump (auto-step ledges) · Shift sprint · Left-click break/attack · Right-click place (or open crafting table / furnace) · E toggle mode · Double-tap Space to fly (Creative) · F3 debug · Mobile: joystick to move, tap the action button to place, hold to break</p>
   </div>
 </div>
 
 <!-- ===================== HUD ===================== -->
 <div id="hud" style="display:none;">
-  <div id="crosshair"></div>
+  <div id="crosshair"><div id="break-ring"></div></div>
 
   <div id="top-bar">
     <div id="top-bar-left">
@@ -83,7 +83,7 @@
     </div>
     <div class="settings-row">
       <label>Mouse sensitivity</label>
-      <input id="sensitivity-slider" type="range" min="0.5" max="2.5" step="0.1" value="1" />
+      <input id="sensitivity-slider" type="range" min="0.2" max="2" step="0.1" value="1" />
     </div>
 
     <button id="btn-resume" class="menu-button primary">Resume</button>
@@ -99,12 +99,30 @@
   </div>
 </div>
 
+<!-- ===================== CRAFTING / FURNACE ===================== -->
+<div id="crafting-overlay" class="overlay" style="display:none;">
+  <div class="menu-panel wide">
+    <h2>Crafting Table</h2>
+    <div id="crafting-recipe-list" class="recipe-list"></div>
+    <button id="btn-close-crafting" class="menu-button">Close</button>
+  </div>
+</div>
+
+<div id="furnace-overlay" class="overlay" style="display:none;">
+  <div class="menu-panel wide">
+    <h2>Furnace</h2>
+    <p class="menu-subtitle" style="margin-bottom:10px;">Each smelt also consumes 1 fuel (wood, planks, or coal).</p>
+    <div id="furnace-recipe-list" class="recipe-list"></div>
+    <button id="btn-close-furnace" class="menu-button">Close</button>
+  </div>
+</div>
+
 <!-- ===================== MOBILE CONTROLS ===================== -->
 <div id="mobile-controls" style="display:none;">
-  <div id="joystick-zone"><div id="joystick-thumb"></div></div>
+  <div id="joystick-zone"></div>
+  <div id="joystick-base"><div id="joystick-thumb"></div></div>
   <div id="action-buttons">
-    <button id="btn-break" class="touch-button">Break</button>
-    <button id="btn-place" class="touch-button">Place</button>
+    <button id="btn-action" class="touch-button action-btn" aria-label="Tap to place, hold to break"></button>
     <button id="btn-jump" class="touch-button jump">Jump</button>
   </div>
 </div>

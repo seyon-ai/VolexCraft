@@ -19,6 +19,40 @@ function mixColor(a, b, t) {
   return a.clone().lerp(b, clamp(t, 0, 1));
 }
 
+/** Small radial-gradient glow texture used for the sun/moon sprites. */
+function makeGlowTexture(coreColor) {
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  grad.addColorStop(0, coreColor);
+  grad.addColorStop(0.5, coreColor);
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+function buildStarField() {
+  const count = 900;
+  const positions = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(Math.random()); // upper hemisphere only (stars stay above horizon)
+    const r = 170 + Math.random() * 25;
+    positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+    positions[i * 3 + 1] = r * Math.cos(phi) + 10;
+    positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const material = new THREE.PointsMaterial({ color: 0xffffff, size: 1.4, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false });
+  return new THREE.Points(geometry, material);
+}
+
 export class TimeSystem {
   constructor(scene) {
     this.scene = scene;
@@ -43,6 +77,13 @@ export class TimeSystem {
     this.ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
 
     scene.add(this.sunLight, this.sunLight.target, this.moonLight, this.ambientLight);
+
+    this.sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeGlowTexture('#fff6d6'), transparent: true, depthWrite: false }));
+    this.sunSprite.scale.set(26, 26, 1);
+    this.moonSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeGlowTexture('#dfe6f2'), transparent: true, depthWrite: false }));
+    this.moonSprite.scale.set(18, 18, 1);
+    this.stars = buildStarField();
+    scene.add(this.sunSprite, this.moonSprite, this.stars);
 
     if (GraphicsSettings.fogEnabled) {
       scene.fog = new THREE.Fog(DAY_FOG.getHex(), GraphicsSettings.fogNear, GraphicsSettings.fogFar);
@@ -72,6 +113,9 @@ export class TimeSystem {
       this.sunLight.position.set(followTarget.x + sx, followTarget.y + Math.max(sy, 5), followTarget.z + sz);
       this.sunLight.target.position.copy(followTarget);
       this.moonLight.position.set(followTarget.x - sx, followTarget.y + Math.max(-sy, 5), followTarget.z - sz);
+      this.sunSprite.position.copy(this.sunLight.position);
+      this.moonSprite.position.copy(this.moonLight.position);
+      this.stars.position.copy(followTarget);
     }
 
     // Derive intensities and colors purely from sun height, so twilight fades smoothly.
@@ -92,6 +136,10 @@ export class TimeSystem {
     if (this.scene.fog) {
       this.scene.fog.color = mixColor(NIGHT_FOG, DAY_FOG, dayFactor);
     }
+
+    this.sunSprite.material.opacity = clamp((sunHeight + 0.05) * 3, 0, 1);
+    this.moonSprite.material.opacity = clamp((-sunHeight + 0.05) * 3, 0, 1);
+    this.stars.material.opacity = clamp(1 - dayFactor * 1.4, 0, 0.85);
   }
 
   setTimeScale(scale) { this.timeScale = scale; }
@@ -104,5 +152,9 @@ export class TimeSystem {
     if (t < 0.68) return 'Day';
     if (t < 0.80) return 'Sunset';
     return 'Night';
+  }
+
+  isNight() {
+    return TimeSystem.sunHeight(this.time) < -0.05;
   }
 }

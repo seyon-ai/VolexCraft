@@ -34,15 +34,16 @@ export const PlayerSettings = {
   gravity: -24.0,
   maxFallSpeed: -40,
   fallDamageThreshold: 4.0, // blocks fallen before damage starts
+  stepHeight: 1.05, // auto-step: walking into a single block-high ledge steps up onto it
 };
 
 export const MobileSettings = {
-  lookSensitivity: 0.0028,
+  lookSensitivity: 0.0022,
   joystickDeadzone: 0.12,
 };
 
 export const DesktopSettings = {
-  mouseSensitivity: 0.0022,
+  mouseSensitivity: 0.0012,
 };
 
 export const TimeSettings = {

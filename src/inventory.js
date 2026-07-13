@@ -8,12 +8,18 @@ import { PLACEABLE_BLOCKS, BlockRegistry } from './block.js';
 import { ItemRegistry, isItem } from './items.js';
 
 const HOTBAR_SIZE = 9;
+const BACKPACK_SIZE = 27;
+const TOTAL_SIZE = HOTBAR_SIZE + BACKPACK_SIZE;
 const MAX_STACK = 64;
+
+export const INVENTORY_HOTBAR_SIZE = HOTBAR_SIZE;
+export const INVENTORY_BACKPACK_SIZE = BACKPACK_SIZE;
+export const INVENTORY_TOTAL_SIZE = TOTAL_SIZE;
 
 export class Inventory {
   constructor(gameModeManager) {
     this.gameMode = gameModeManager;
-    this.slots = new Array(HOTBAR_SIZE).fill(null);
+    this.slots = new Array(TOTAL_SIZE).fill(null);
     this.selectedIndex = 0;
     this.gameMode.onChange(() => this.refreshForMode());
     this.refreshForMode();
@@ -22,10 +28,11 @@ export class Inventory {
   refreshForMode() {
     if (this.gameMode.isCreative()) {
       this._survivalBackup = this.slots; // remember real progress before switching away
-      this.slots = PLACEABLE_BLOCKS.slice(0, HOTBAR_SIZE).map((id) => ({ id, count: Infinity }));
+      const filled = PLACEABLE_BLOCKS.slice(0, TOTAL_SIZE).map((id) => ({ id, count: Infinity }));
+      this.slots = new Array(TOTAL_SIZE).fill(null).map((_, i) => filled[i] ?? null);
     } else {
       // Returning to Survival: Creative's infinite stacks never carry over.
-      this.slots = this._survivalBackup ?? new Array(HOTBAR_SIZE).fill(null);
+      this.slots = this._survivalBackup ?? new Array(TOTAL_SIZE).fill(null);
     }
   }
 

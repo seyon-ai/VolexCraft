@@ -31,6 +31,8 @@ export const SMELTING_RECIPES = [
   { id: 'gold_ingot', result: { id: ItemId.GOLD_INGOT, count: 1 }, needs: [{ id: BlockId.GOLD_ORE, count: 1 }] },
   { id: 'glass', result: { id: BlockId.GLASS, count: 1 }, needs: [{ id: BlockId.SAND, count: 1 }] },
   { id: 'brick', result: { id: BlockId.BRICK, count: 1 }, needs: [{ id: BlockId.CLAY, count: 1 }] },
+  { id: 'cooked_beef', result: { id: ItemId.COOKED_BEEF, count: 1 }, needs: [{ id: ItemId.RAW_BEEF, count: 1 }] },
+  { id: 'cooked_porkchop', result: { id: ItemId.COOKED_PORKCHOP, count: 1 }, needs: [{ id: ItemId.RAW_PORKCHOP, count: 1 }] },
 ];
 
 // One fuel item consumed per smelt, regardless of type (kept simple on purpose).

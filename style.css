@@ -101,27 +101,53 @@ html, body {
 
 .death-title { font-family: var(--pixel-font); font-size: 22px; color: var(--danger); text-shadow: 3px 3px 0 rgba(0,0,0,0.5); }
 
-.menu-panel.wide { min-width: 340px; max-width: 480px; }
+.menu-panel.wide { min-width: 340px; max-width: 560px; }
 
-.recipe-list { max-height: 50vh; overflow-y: auto; margin: 12px 0; display: flex; flex-direction: column; gap: 8px; }
-.recipe-card {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  background: rgba(255,255,255,0.05); border: 2px solid var(--stone-dark); padding: 8px 10px;
-  text-align: left;
+.inv-grid { display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; margin: 10px 0; }
+.inv-hotbar-row { padding-top: 8px; border-top: 2px solid var(--stone-dark); }
+.inv-slot {
+  aspect-ratio: 1; position: relative;
+  background: rgba(255,255,255,0.05); border: 2px solid var(--stone-dark);
+  box-shadow: inset 1px 1px 0 rgba(255,255,255,0.1), inset -2px -2px 0 rgba(0,0,0,0.35);
+  cursor: pointer;
 }
-.recipe-info { display: flex; align-items: center; gap: 8px; font-size: 12px; }
-.recipe-swatch { width: 22px; height: 22px; flex-shrink: 0; box-shadow: inset -2px -2px 0 rgba(0,0,0,0.25), inset 2px 2px 0 rgba(255,255,255,0.2); }
-.recipe-needs { font-size: 10px; opacity: 0.75; }
+.inv-slot.filled { background-color: var(--swatch-color, #999); background-image: var(--swatch-image, none); background-size: cover; background-position: center; }
+.inv-slot.selected { box-shadow: 0 0 0 2px var(--grass); }
+.inv-slot .inv-count { position: absolute; bottom: 1px; right: 2px; font-size: 9px; font-weight: 700; text-shadow: 1px 1px 0 #000; }
+.inv-section-title { font-size: 13px; margin: 14px 0 4px; text-align: left; opacity: 0.85; }
+
+.recipe-list {
+  max-height: 55vh; overflow-y: auto; margin: 12px 0;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+}
+.recipe-card {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  background: rgba(255,255,255,0.05); border: 2px solid var(--stone-dark); padding: 8px 6px;
+  text-align: center;
+}
+.recipe-info { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11px; width: 100%; }
+.recipe-swatch {
+  width: 34px; height: 34px; flex-shrink: 0;
+  background-color: var(--swatch-color, #999);
+  background-image: var(--swatch-image, none);
+  background-size: cover; background-position: center;
+  box-shadow: inset -2px -2px 0 rgba(0,0,0,0.25), inset 2px 2px 0 rgba(255,255,255,0.2);
+}
+.recipe-needs { font-size: 9px; opacity: 0.75; line-height: 1.5; }
 .recipe-needs .short { color: var(--danger); opacity: 1; }
 .recipe-make-btn {
-  padding: 6px 12px; font-size: 11px; font-weight: 700; font-family: var(--body-font); color: var(--ink);
-  background: linear-gradient(var(--grass), var(--grass-dark)); border: none; cursor: pointer; flex-shrink: 0;
+  padding: 5px 10px; font-size: 10px; font-weight: 700; font-family: var(--body-font); color: var(--ink);
+  background: linear-gradient(var(--grass), var(--grass-dark)); border: none; cursor: pointer; width: 100%;
 }
 .recipe-make-btn:disabled { background: linear-gradient(#555, #333); cursor: not-allowed; opacity: 0.6; }
 
+@media (max-width: 480px) {
+  .recipe-list { grid-template-columns: repeat(3, 1fr); }
+}
+
 /* ---------- HUD ---------- */
 
-#hud { position: absolute; inset: 0; z-index: 10; pointer-events: none; }
+#hud { position: absolute; inset: 0; z-index: 25; pointer-events: none; }
 
 #crosshair {
   position: absolute; top: 50%; left: 50%; width: 18px; height: 18px;
@@ -150,6 +176,7 @@ html, body {
 }
 
 #top-bar-left { display: flex; flex-direction: column; gap: 6px; }
+#top-bar-right { display: flex; gap: 8px; pointer-events: auto; }
 
 .icon-button {
   pointer-events: auto;
@@ -188,6 +215,15 @@ html, body {
   display: flex; gap: 4px;
   pointer-events: auto;
 }
+
+#toast {
+  position: absolute; bottom: 88px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.75); color: var(--ink); padding: 8px 16px;
+  font-size: 12px; border: 2px solid var(--stone-dark);
+  opacity: 0; transition: opacity 0.25s;
+  pointer-events: none; white-space: nowrap;
+}
+#toast.visible { opacity: 1; }
 .hotbar-slot {
   width: 46px; height: 46px;
   background: rgba(20,16,10,0.75);
@@ -198,7 +234,9 @@ html, body {
 }
 .hotbar-slot.filled::before {
   content: ''; position: absolute; inset: 8px;
-  background: var(--swatch, #999);
+  background-color: var(--swatch-color, #999);
+  background-image: var(--swatch-image, none);
+  background-size: cover; background-position: center;
   box-shadow: inset -3px -3px 0 rgba(0,0,0,0.25), inset 2px 2px 0 rgba(255,255,255,0.2);
 }
 .hotbar-slot.selected { border-color: var(--ink); box-shadow: 0 0 0 2px var(--grass); }
@@ -210,9 +248,10 @@ html, body {
 #mobile-controls { position: absolute; inset: 0; z-index: 20; pointer-events: none; }
 
 /* Large invisible hit-zone: touching anywhere in the bottom-left ~half of
-   the screen summons the joystick right where the thumb landed. */
+   the screen summons the joystick right where the thumb landed. Stops short
+   of the hotbar strip so it never competes with hotbar taps. */
 #joystick-zone {
-  position: absolute; left: 0; bottom: 0; width: 58%; height: 68%;
+  position: absolute; left: 0; bottom: 76px; width: 58%; height: 60%;
   pointer-events: auto; touch-action: none;
 }
 #joystick-base {
@@ -238,15 +277,7 @@ html, body {
   background: rgba(20,16,10,0.7); border: 2px solid rgba(255,255,255,0.25);
   box-shadow: inset 1px 1px 0 rgba(255,255,255,0.15);
 }
-.touch-button.jump { width: 72px; height: 44px; }
-.touch-button.action-btn {
-  width: 76px; height: 76px; border-radius: 50%;
-  background: rgba(217,79,79,0.35); border: 3px solid rgba(255,255,255,0.4);
-  position: relative;
-}
-.touch-button.action-btn::after {
-  content: 'Tap: place\A Hold: break'; white-space: pre; font-size: 9px; line-height: 1.3;
-}
+.touch-button.jump { width: 76px; height: 56px; }
 
 @media (orientation: portrait) {
   .menu-hint { display: none; }

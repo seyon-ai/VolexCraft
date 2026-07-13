@@ -3,7 +3,9 @@
 // UI concerns (and making the HUD easy to restyle independently).
 
 import { WorldSettings } from './settings.js';
-import { ItemRegistry, isItem } from './items.js';
+import { ItemRegistry, isItem, ITEM_ICON_PATH } from './items.js';
+import { iconTileFor } from './block.js';
+import { tileImageUrl } from './textureAtlas.js';
 
 export class UI {
   constructor() {
@@ -16,6 +18,7 @@ export class UI {
 
       hud: document.getElementById('hud'),
       hotbar: document.getElementById('hotbar'),
+      toast: document.getElementById('toast'),
       hearts: document.getElementById('hearts'),
       healthContainer: document.getElementById('health-container'),
       crosshair: document.getElementById('crosshair'),
@@ -24,6 +27,7 @@ export class UI {
       modeLabel: document.getElementById('mode-label'),
       timeLabel: document.getElementById('time-label'),
       pauseBtn: document.getElementById('btn-pause'),
+      fullscreenBtn: document.getElementById('btn-fullscreen'),
 
       pauseOverlay: document.getElementById('pause-overlay'),
       resumeBtn: document.getElementById('btn-resume'),
@@ -44,12 +48,18 @@ export class UI {
       furnaceList: document.getElementById('furnace-recipe-list'),
       closeFurnaceBtn: document.getElementById('btn-close-furnace'),
 
+      inventoryBtn: document.getElementById('btn-inventory'),
+      inventoryOverlay: document.getElementById('inventory-overlay'),
+      inventoryBackpackGrid: document.getElementById('inventory-backpack-grid'),
+      inventoryHotbarRow: document.getElementById('inventory-hotbar-row'),
+      inventoryCraftingList: document.getElementById('inventory-crafting-list'),
+      closeInventoryBtn: document.getElementById('btn-close-inventory'),
+
       mobileControls: document.getElementById('mobile-controls'),
       joystickZone: document.getElementById('joystick-zone'),
       joystickBase: document.getElementById('joystick-base'),
       joystickThumb: document.getElementById('joystick-thumb'),
       btnJump: document.getElementById('btn-jump'),
-      btnAction: document.getElementById('btn-action'),
       canvasContainer: document.getElementById('canvas-container'),
     };
 
@@ -84,17 +94,17 @@ export class UI {
   }
 
   updateHotbar(inventory) {
-    inventory.slots.forEach((slot, i) => {
+    inventory.slots.slice(0, 9).forEach((slot, i) => {
       const { root, label } = this.hotbarSlotEls[i];
       root.classList.toggle('selected', i === inventory.selectedIndex);
       if (slot) {
-        root.style.setProperty('--swatch', swatchColorFor(slot.id));
+        applyIconStyle(root, slot.id);
         root.classList.add('filled');
         label.textContent = slot.count === Infinity ? '' : String(slot.count);
         root.title = inventory.itemName(slot.id);
       } else {
         root.classList.remove('filled');
-        root.style.removeProperty('--swatch');
+        clearIconStyle(root);
         label.textContent = '';
         root.title = '';
       }
@@ -121,6 +131,13 @@ export class UI {
 
   updateTimeLabel(phaseLabel) {
     this.dom.timeLabel.textContent = phaseLabel;
+  }
+
+  showToast(message, durationMs = 1800) {
+    clearTimeout(this._toastTimer);
+    this.dom.toast.textContent = message;
+    this.dom.toast.classList.add('visible');
+    this._toastTimer = setTimeout(() => this.dom.toast.classList.remove('visible'), durationMs);
   }
 
   updateBreakProgress(fraction) {
@@ -157,6 +174,45 @@ export class UI {
   bindCraftingClose(onClose) { this.dom.closeCraftingBtn.addEventListener('click', onClose); }
   bindFurnaceClose(onClose) { this.dom.closeFurnaceBtn.addEventListener('click', onClose); }
 
+  bindInventoryOpen(onOpen) { this.dom.inventoryBtn.addEventListener('click', onOpen); }
+  bindInventoryClose(onClose) { this.dom.closeInventoryBtn.addEventListener('click', onClose); }
+
+  showInventoryPanel() { this.dom.inventoryOverlay.style.display = 'flex'; }
+  hideInventoryPanel() { this.dom.inventoryOverlay.style.display = 'none'; }
+
+  /**
+   * Renders the backpack grid + a hotbar preview row. Clicking any slot swaps
+   * its contents with the currently-selected hotbar slot (a simple one-click
+   * "quick move" in place of full drag-and-drop).
+   */
+  renderInventoryScreen(inventory, onSlotClick) {
+    this._renderInvGrid(this.dom.inventoryBackpackGrid, inventory, 9, inventory.slots.length, onSlotClick);
+    this._renderInvGrid(this.dom.inventoryHotbarRow, inventory, 0, 9, onSlotClick);
+  }
+
+  _renderInvGrid(container, inventory, startIndex, endIndex, onSlotClick) {
+    container.innerHTML = '';
+    for (let i = startIndex; i < endIndex; i++) {
+      const slot = inventory.slots[i];
+      const el = document.createElement('div');
+      el.className = 'inv-slot';
+      if (i === inventory.selectedIndex) el.classList.add('selected');
+      if (slot) {
+        el.classList.add('filled');
+        applyIconStyle(el, slot.id);
+        el.title = inventory.itemName(slot.id);
+        if (slot.count !== Infinity) {
+          const count = document.createElement('span');
+          count.className = 'inv-count';
+          count.textContent = String(slot.count);
+          el.appendChild(count);
+        }
+      }
+      el.addEventListener('click', () => onSlotClick(i));
+      container.appendChild(el);
+    }
+  }
+
   showCraftingPanel() { this.dom.craftingOverlay.style.display = 'flex'; }
   hideCraftingPanel() { this.dom.craftingOverlay.style.display = 'none'; }
   showFurnacePanel() { this.dom.furnaceOverlay.style.display = 'flex'; }
@@ -173,7 +229,7 @@ export class UI {
       info.className = 'recipe-info';
       const swatch = document.createElement('div');
       swatch.className = 'recipe-swatch';
-      swatch.style.background = swatchColorFor(recipe.result.id);
+      applyIconStyle(swatch, recipe.result.id);
       info.appendChild(swatch);
 
       const text = document.createElement('div');
@@ -249,7 +305,6 @@ export class UI {
       joystickThumb: this.dom.joystickThumb,
       lookZone: this.dom.canvasContainer,
       btnJump: this.dom.btnJump,
-      btnAction: this.dom.btnAction,
     };
   }
 }
@@ -265,10 +320,31 @@ function swatchColorFor(id) {
     12: '#c8e1e8', 13: '#7e7a76', 14: '#a0a4ae', 15: '#28282a', 16: '#d8b28c',
     17: '#f4d040', 18: '#66e0e0', 19: '#d22020', 20: '#30c46e', 21: '#b08850',
     22: '#78787c', 23: '#964838', 24: '#d8c696', 25: '#5a785a', 26: '#b0d6eb',
-    27: '#c47820', 28: '#3a8442', 29: '#58a03c', 30: '#d23434', 31: '#e8d030',
-    32: '#d8d6d0', 33: '#f8d448', 34: '#78e8e8',
+    27: '#c47820', 28: '#3a8442', 29: '#58a03c', 32: '#d8d6d0', 33: '#f8d448', 34: '#78e8e8',
   };
   return colors[id] || '#999';
+}
+
+/** Real image URL for a slot's contents, or null to fall back to a flat color. */
+function iconUrlFor(id) {
+  if (isItem(id)) {
+    const image = ItemRegistry[id]?.display?.image;
+    return image ? ITEM_ICON_PATH + image : null;
+  }
+  const tile = iconTileFor(id);
+  return tile !== null ? tileImageUrl(tile) : null;
+}
+
+/** Sets the CSS custom properties an icon element reads for its background (image over color fallback). */
+function applyIconStyle(el, id) {
+  el.style.setProperty('--swatch-color', swatchColorFor(id));
+  const url = iconUrlFor(id);
+  el.style.setProperty('--swatch-image', url ? `url("${url}")` : 'none');
+}
+
+function clearIconStyle(el) {
+  el.style.removeProperty('--swatch-color');
+  el.style.removeProperty('--swatch-image');
 }
 
 function hasAll(inventory, needs) {

@@ -26,34 +26,42 @@ export const ItemId = {
 
   RAW_BEEF: 1030,
   RAW_PORKCHOP: 1031,
+  COOKED_BEEF: 1032,
+  COOKED_PORKCHOP: 1033,
 };
 
-const swatch = (color) => ({ kind: 'swatch', color });
-const icon = (glyph, color) => ({ kind: 'glyph', glyph, color });
+// Where to look for user-supplied icon images (one small square PNG per item).
+// Any item whose file is missing just keeps its procedural glyph/swatch look.
+export const ITEM_ICON_PATH = 'assets/textures/items/';
+
+const swatch = (color, image) => ({ kind: 'swatch', color, image });
+const icon = (glyph, color, image) => ({ kind: 'glyph', glyph, color, image });
 
 export const ItemRegistry = {
-  [ItemId.STICK]: { name: 'Stick', display: icon('|', '#a9825a') },
-  [ItemId.COAL]: { name: 'Coal', display: swatch('#242426') },
-  [ItemId.RAW_IRON]: { name: 'Raw Iron', display: swatch('#c9a67a') },
-  [ItemId.IRON_INGOT]: { name: 'Iron Ingot', display: swatch('#dcdad2') },
-  [ItemId.RAW_GOLD]: { name: 'Raw Gold', display: swatch('#e0b840') },
-  [ItemId.GOLD_INGOT]: { name: 'Gold Ingot', display: swatch('#f8d448') },
-  [ItemId.DIAMOND]: { name: 'Diamond', display: swatch('#66e0e0') },
-  [ItemId.REDSTONE]: { name: 'Redstone', display: swatch('#c81c1c') },
-  [ItemId.EMERALD]: { name: 'Emerald', display: swatch('#30c46e') },
+  [ItemId.STICK]: { name: 'Stick', display: icon('|', '#a9825a', 'stick.png') },
+  [ItemId.COAL]: { name: 'Coal', display: swatch('#242426', 'coal.png') },
+  [ItemId.RAW_IRON]: { name: 'Raw Iron', display: swatch('#c9a67a', 'raw_iron.png') },
+  [ItemId.IRON_INGOT]: { name: 'Iron Ingot', display: swatch('#dcdad2', 'iron_ingot.png') },
+  [ItemId.RAW_GOLD]: { name: 'Raw Gold', display: swatch('#e0b840', 'raw_gold.png') },
+  [ItemId.GOLD_INGOT]: { name: 'Gold Ingot', display: swatch('#f8d448', 'gold_ingot.png') },
+  [ItemId.DIAMOND]: { name: 'Diamond', display: swatch('#66e0e0', 'diamond.png') },
+  [ItemId.REDSTONE]: { name: 'Redstone', display: swatch('#c81c1c', 'redstone.png') },
+  [ItemId.EMERALD]: { name: 'Emerald', display: swatch('#30c46e', 'emerald.png') },
 
-  [ItemId.WOOD_SWORD]: { name: 'Wood Sword', display: icon('/', '#a9825a'), weapon: { damage: 3 } },
-  [ItemId.STONE_SWORD]: { name: 'Stone Sword', display: icon('/', '#888890'), weapon: { damage: 4 } },
-  [ItemId.IRON_SWORD]: { name: 'Iron Sword', display: icon('/', '#dcdad2'), weapon: { damage: 5 } },
-  [ItemId.DIAMOND_SWORD]: { name: 'Diamond Sword', display: icon('/', '#66e0e0'), weapon: { damage: 6 } },
+  [ItemId.WOOD_SWORD]: { name: 'Wood Sword', display: icon('/', '#a9825a', 'wood_sword.png'), weapon: { damage: 3 } },
+  [ItemId.STONE_SWORD]: { name: 'Stone Sword', display: icon('/', '#888890', 'stone_sword.png'), weapon: { damage: 4 } },
+  [ItemId.IRON_SWORD]: { name: 'Iron Sword', display: icon('/', '#dcdad2', 'iron_sword.png'), weapon: { damage: 5 } },
+  [ItemId.DIAMOND_SWORD]: { name: 'Diamond Sword', display: icon('/', '#66e0e0', 'diamond_sword.png'), weapon: { damage: 6 } },
 
-  [ItemId.WOOD_PICKAXE]: { name: 'Wood Pickaxe', display: icon('T', '#a9825a'), pickaxe: { tier: 1 } },
-  [ItemId.STONE_PICKAXE]: { name: 'Stone Pickaxe', display: icon('T', '#888890'), pickaxe: { tier: 2 } },
-  [ItemId.IRON_PICKAXE]: { name: 'Iron Pickaxe', display: icon('T', '#dcdad2'), pickaxe: { tier: 3 } },
-  [ItemId.DIAMOND_PICKAXE]: { name: 'Diamond Pickaxe', display: icon('T', '#66e0e0'), pickaxe: { tier: 4 } },
+  [ItemId.WOOD_PICKAXE]: { name: 'Wood Pickaxe', display: icon('T', '#a9825a', 'wood_pickaxe.png'), pickaxe: { tier: 1 } },
+  [ItemId.STONE_PICKAXE]: { name: 'Stone Pickaxe', display: icon('T', '#888890', 'stone_pickaxe.png'), pickaxe: { tier: 2 } },
+  [ItemId.IRON_PICKAXE]: { name: 'Iron Pickaxe', display: icon('T', '#dcdad2', 'iron_pickaxe.png'), pickaxe: { tier: 3 } },
+  [ItemId.DIAMOND_PICKAXE]: { name: 'Diamond Pickaxe', display: icon('T', '#66e0e0', 'diamond_pickaxe.png'), pickaxe: { tier: 4 } },
 
-  [ItemId.RAW_BEEF]: { name: 'Raw Beef', display: swatch('#c1584f') },
-  [ItemId.RAW_PORKCHOP]: { name: 'Raw Porkchop', display: swatch('#e0968f') },
+  [ItemId.RAW_BEEF]: { name: 'Raw Beef', display: swatch('#c1584f', 'raw_beef.png'), food: { heal: 2 } },
+  [ItemId.RAW_PORKCHOP]: { name: 'Raw Porkchop', display: swatch('#e0968f', 'raw_porkchop.png'), food: { heal: 2 } },
+  [ItemId.COOKED_BEEF]: { name: 'Cooked Beef', display: swatch('#8a4a2e', 'cooked_beef.png'), food: { heal: 5 } },
+  [ItemId.COOKED_PORKCHOP]: { name: 'Cooked Porkchop', display: swatch('#a9704a', 'cooked_porkchop.png'), food: { heal: 5 } },
 };
 
 export function isItem(id) { return id >= 1000; }
@@ -73,4 +81,12 @@ export function weaponDamage(id) {
 export function pickaxeTier(id) {
   if (isItem(id) && ItemRegistry[id]?.pickaxe) return ItemRegistry[id].pickaxe.tier;
   return 0;
+}
+
+export function isFood(id) {
+  return isItem(id) && !!ItemRegistry[id]?.food;
+}
+
+export function foodHealAmount(id) {
+  return isItem(id) && ItemRegistry[id]?.food ? ItemRegistry[id].food.heal : 0;
 }

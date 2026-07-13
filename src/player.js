@@ -24,13 +24,15 @@ export class Player {
 
     this._fallStartY = null;
     this.eventLog = []; // simple queue UI can drain (damage taken, death, etc.)
+
+    this._stepVisualOffset = 0; // eases the camera up smoothly after an auto-step (physics itself is instant)
   }
 
   get width() { return PlayerSettings.width; }
   get height() { return PlayerSettings.height; }
 
   getEyePosition(out = new THREE.Vector3()) {
-    return out.set(this.position.x, this.position.y + PlayerSettings.eyeHeight, this.position.z);
+    return out.set(this.position.x, this.position.y + PlayerSettings.eyeHeight + this._stepVisualOffset, this.position.z);
   }
 
   getAABB(pos = this.position) {
@@ -113,6 +115,10 @@ export class Player {
       this.moveAxis(axis, delta);
       return true;
     }
+    // Step succeeded: physically we're already at the new height, but ease
+    // the camera up from where it was so the step reads as a smooth hop
+    // rather than a snap.
+    this._stepVisualOffset -= PlayerSettings.stepHeight;
     return false;
   }
 
@@ -170,6 +176,12 @@ export class Player {
     }
 
     if (this.position.y < -32) this.respawn(); // fell out of the world
+
+    if (this._stepVisualOffset !== 0) {
+      const ease = Math.min(1, dt * 10); // ~100ms to settle
+      this._stepVisualOffset += (0 - this._stepVisualOffset) * ease;
+      if (Math.abs(this._stepVisualOffset) < 0.002) this._stepVisualOffset = 0;
+    }
   }
 
   applyFallDamage(fallDistance) {

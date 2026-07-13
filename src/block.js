@@ -37,8 +37,6 @@ export const BlockId = {
   PUMPKIN: 27,
   CACTUS: 28,
   TALL_GRASS: 29,
-  FLOWER_RED: 30,
-  FLOWER_YELLOW: 31,
   IRON_BLOCK: 32,
   GOLD_BLOCK: 33,
   DIAMOND_BLOCK: 34,
@@ -78,15 +76,17 @@ export const BlockRegistry = {
   [BlockId.ICE]: { name: 'Ice', solid: true, transparent: true, liquid: false, faces: uniform(TILE.ICE) },
   [BlockId.PUMPKIN]: { name: 'Pumpkin', solid: true, transparent: false, liquid: false, faces: topBottomSide(TILE.PUMPKIN_TOP, TILE.PUMPKIN_TOP, TILE.PUMPKIN_SIDE) },
   [BlockId.CACTUS]: { name: 'Cactus', solid: true, transparent: false, liquid: false, faces: topBottomSide(TILE.CACTUS_TOP, TILE.CACTUS_TOP, TILE.CACTUS_SIDE) },
-  [BlockId.TALL_GRASS]: { name: 'Tall Grass', solid: false, transparent: true, liquid: false, faces: uniform(TILE.TALL_GRASS) },
-  [BlockId.FLOWER_RED]: { name: 'Red Flower', solid: false, transparent: true, liquid: false, faces: uniform(TILE.FLOWER_RED) },
-  [BlockId.FLOWER_YELLOW]: { name: 'Yellow Flower', solid: false, transparent: true, liquid: false, faces: uniform(TILE.FLOWER_YELLOW) },
+  [BlockId.TALL_GRASS]: { name: 'Tall Grass', solid: false, transparent: true, liquid: false, faces: uniform(TILE.TALL_GRASS), cutout: true },
   [BlockId.IRON_BLOCK]: { name: 'Block of Iron', solid: true, transparent: false, liquid: false, faces: uniform(TILE.IRON_BLOCK), pickaxeTier: 2 },
   [BlockId.GOLD_BLOCK]: { name: 'Block of Gold', solid: true, transparent: false, liquid: false, faces: uniform(TILE.GOLD_BLOCK), pickaxeTier: 2 },
   [BlockId.DIAMOND_BLOCK]: { name: 'Block of Diamond', solid: true, transparent: false, liquid: false, faces: uniform(TILE.DIAMOND_BLOCK), pickaxeTier: 3 },
 };
 
 export function isSolid(id) { return BlockRegistry[id]?.solid ?? false; }
+export function iconTileFor(id) {
+  const faces = BlockRegistry[id]?.faces;
+  return faces ? (faces[2] ?? faces[0]) : null;
+}
 export function isTransparent(id) { return BlockRegistry[id]?.transparent ?? true; }
 export function isLiquid(id) { return id === BlockId.WATER; }
 export function isUnbreakable(id) { return BlockRegistry[id]?.unbreakable ?? false; }

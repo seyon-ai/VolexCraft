@@ -127,7 +127,7 @@ export class TerrainGenerator {
     return null;
   }
 
-  /** Surface decoration (flowers, tall grass, cactus, pumpkin) for a column that isn't a tree. */
+  /** Surface decoration (tall grass, cactus, pumpkin) for a column that isn't a tree. */
   decorationAt(x, z, biome, height) {
     const r = this.voxelRoll(x, height + 1, z, 22);
     if (biome === Biome.DESERT) {
@@ -135,9 +135,7 @@ export class TerrainGenerator {
     }
     if (biome === Biome.PLAINS || biome === Biome.FOREST) {
       if (r < 0.0015) return BlockId.PUMPKIN;
-      if (r < 0.045) return BlockId.FLOWER_RED;
-      if (r < 0.085) return BlockId.FLOWER_YELLOW;
-      if (r < 0.22) return BlockId.TALL_GRASS;
+      if (r < 0.38) return BlockId.TALL_GRASS;
       return null;
     }
     return null;

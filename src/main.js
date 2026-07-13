@@ -14,7 +14,7 @@ import { DesktopControls } from './controls.js';
 import { MobileControls } from './mobileControls.js';
 import { SaveSystem } from './saveSystem.js';
 import { BlockId, dropFor, isUnbreakable, requiredPickaxeTier, interactiveKind } from './block.js';
-import { pickaxeTier, weaponDamage } from './items.js';
+import { pickaxeTier, weaponDamage, isFood, foodHealAmount } from './items.js';
 import { MobManager } from './mobs.js';
 import { CRAFTING_RECIPES, SMELTING_RECIPES, craftOnce, smeltOnce } from './crafting.js';
 import { GraphicsSettings, WorldSettings, isMobileDevice } from './settings.js';
@@ -35,6 +35,7 @@ class Game {
 
     this._initRenderer();
     this._initBlockOutline();
+    this._raycaster = new THREE.Raycaster();
 
     if (this.mobile) {
       this.controls = new MobileControls(this, this.ui.getMobileElements());
@@ -77,6 +78,9 @@ class Game {
 
     this.ui.bindCraftingClose(() => this._closePanel());
     this.ui.bindFurnaceClose(() => this._closePanel());
+    this.ui.bindInventoryOpen(() => this._openInventoryScreen());
+    this.ui.bindInventoryClose(() => this._closePanel());
+    this.ui.dom.fullscreenBtn.addEventListener('click', () => this._toggleFullscreen());
 
     document.addEventListener('keydown', (e) => {
       if (e.code === 'F3') { this._debugVisible = !this._debugVisible; this.ui.dom.debugPanel.classList.toggle('visible', this._debugVisible); }
@@ -207,6 +211,14 @@ class Game {
     }
   }
 
+  _toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen?.().catch(() => {});
+    } else {
+      document.exitFullscreen?.().catch(() => {});
+    }
+  }
+
   // ---------------- pause / settings ----------------
 
   _pause() {
@@ -214,11 +226,13 @@ class Game {
     this.paused = true;
     this.ui.showPause();
     if (!this.mobile) document.exitPointerLock();
+    this._setMobileControlsVisible(false);
   }
 
   _resume() {
     this.paused = false;
     this.ui.hidePause();
+    this._setMobileControlsVisible(true);
   }
 
   _saveAndQuit() {
@@ -245,11 +259,42 @@ class Game {
     this._sensitivityMultiplier = multiplier; // applied at input-poll time
   }
 
+  _setMobileControlsVisible(visible) {
+    if (this.mobile) this.ui.showMobileControls(visible);
+  }
+
+  _openInventoryScreen() {
+    if (!this.running || this.paused || this._openPanel) return;
+    this._openPanel = 'inventory';
+    this._renderInventoryScreen();
+    this.ui.showInventoryPanel();
+    if (!this.mobile) document.exitPointerLock();
+    this._setMobileControlsVisible(false);
+  }
+
+  _renderInventoryScreen() {
+    this.ui.renderInventoryScreen(this.inventory, (i) => this._onInventorySlotClick(i));
+    this.ui.renderRecipeList(this.ui.dom.inventoryCraftingList, CRAFTING_RECIPES, this.inventory, 'Craft', (recipe) => {
+      if (craftOnce(this.inventory, recipe)) this._renderInventoryScreen();
+    });
+  }
+
+  _onInventorySlotClick(index) {
+    if (this.gameMode.isCreative()) return; // creative slots are fixed infinite stacks
+    const sel = this.inventory.selectedIndex;
+    if (index === sel) return;
+    const tmp = this.inventory.slots[sel];
+    this.inventory.slots[sel] = this.inventory.slots[index];
+    this.inventory.slots[index] = tmp;
+    this._renderInventoryScreen();
+  }
+
   _openCraftingPanel() {
     this._openPanel = 'crafting';
     this._renderCraftingPanel();
     this.ui.showCraftingPanel();
     if (!this.mobile) document.exitPointerLock();
+    this._setMobileControlsVisible(false);
   }
 
   _openFurnacePanel() {
@@ -257,6 +302,7 @@ class Game {
     this._renderFurnacePanel();
     this.ui.showFurnacePanel();
     if (!this.mobile) document.exitPointerLock();
+    this._setMobileControlsVisible(false);
   }
 
   _renderCraftingPanel() {
@@ -275,6 +321,8 @@ class Game {
     this._openPanel = null;
     this.ui.hideCraftingPanel();
     this.ui.hideFurnacePanel();
+    this.ui.hideInventoryPanel();
+    if (this.running && !this.paused && !this.player.isDead) this._setMobileControlsVisible(true);
   }
 
   // ---------------- player-triggered actions ----------------
@@ -294,6 +342,7 @@ class Game {
     const spawnY = this.world.getHeightAt(this.player.position.x, this.player.position.z) + 2;
     this.player.respawn(new THREE.Vector3(this.player.position.x, spawnY, this.player.position.z));
     this.ui.hideDeathScreen();
+    this._setMobileControlsVisible(true);
   }
 
   // ---------------- per-frame update ----------------
@@ -342,7 +391,11 @@ class Game {
       wish.y = this.player.flying ? input.ascend : 0;
 
       this.player.update(dt, wish, input.jumpPressed, this.gameMode.mode);
-      if (this.player.isDead) this.ui.showDeathScreen();
+      if (this.player.isDead) {
+        this.ui.showDeathScreen();
+        if (!this.mobile) document.exitPointerLock();
+        this._setMobileControlsVisible(false);
+      }
     }
 
     this.camera.position.copy(this.player.getEyePosition());
@@ -372,14 +425,24 @@ class Game {
   }
 
   _updateTargetedBlock(input, dt) {
-    const eye = this.player.getEyePosition();
-    const yaw = input.yaw, pitch = input.pitch;
-    const dir = new THREE.Vector3(
-      -Math.sin(yaw) * Math.cos(pitch),
-      Math.sin(pitch),
-      -Math.cos(yaw) * Math.cos(pitch)
-    );
-    const hit = this.world.raycast(eye, dir, 6.5);
+    let origin, direction;
+
+    if (input.aimScreen) {
+      const ndcX = (input.aimScreen.x / window.innerWidth) * 2 - 1;
+      const ndcY = -(input.aimScreen.y / window.innerHeight) * 2 + 1;
+      this._raycaster.setFromCamera({ x: ndcX, y: ndcY }, this.camera);
+      origin = this._raycaster.ray.origin;
+      direction = this._raycaster.ray.direction;
+    } else {
+      origin = this.player.getEyePosition();
+      direction = new THREE.Vector3(
+        -Math.sin(input.yaw) * Math.cos(input.pitch),
+        Math.sin(input.pitch),
+        -Math.cos(input.yaw) * Math.cos(input.pitch)
+      );
+    }
+
+    const hit = this.world.raycast(origin, direction, 6.5);
 
     if (hit) {
       this.outline.position.set(hit.position[0] + 0.5, hit.position[1] + 0.5, hit.position[2] + 0.5);
@@ -388,14 +451,13 @@ class Game {
       this.outline.visible = false;
     }
 
-    this._handleBreakPlace(hit, input, dt, dir);
+    this._handleBreakPlace(hit, input, dt, origin, direction);
   }
 
-  _handleBreakPlace(hit, input, dt, facing) {
+  _handleBreakPlace(hit, input, dt, origin, facing) {
     this._attackCooldownTimer -= dt;
 
-    const eye = this.player.getEyePosition();
-    const mobTarget = this.mobManager.findAttackTarget(eye, facing, ATTACK_RANGE);
+    const mobTarget = this.mobManager.findAttackTarget(origin, facing, ATTACK_RANGE);
 
     if (mobTarget && input.breakHeld) {
       this._breakProgress = 0;
@@ -424,12 +486,25 @@ class Game {
       this._breakTargetKey = null;
     }
 
-    if (hit && input.placePressed) {
-      const kind = interactiveKind(hit.blockId);
-      if (kind === 'crafting') this._openCraftingPanel();
-      else if (kind === 'furnace') this._openFurnacePanel();
-      else this._placeBlock(hit);
+    if (input.placePressed) {
+      const selected = this.inventory.getSelectedBlockId();
+      if (isFood(selected)) {
+        this._eatSelected();
+      } else if (hit) {
+        const kind = interactiveKind(hit.blockId);
+        if (kind === 'crafting') this._openCraftingPanel();
+        else if (kind === 'furnace') this._openFurnacePanel();
+        else this._placeBlock(hit);
+      }
     }
+  }
+
+  _eatSelected() {
+    if (this.player.health >= this.player.maxHealth) return; // no reason to eat at full health
+    const id = this.inventory.getSelectedBlockId();
+    const heal = foodHealAmount(id);
+    if (heal <= 0) return;
+    if (this.inventory.consumeSelected()) this.player.heal(heal);
   }
 
   _breakBlock(hit) {
@@ -439,7 +514,8 @@ class Game {
       const requiredTier = requiredPickaxeTier(hit.blockId);
       const haveTier = pickaxeTier(this.inventory.getSelectedBlockId());
       if (requiredTier === 0 || haveTier >= requiredTier) {
-        this.inventory.addItem(dropFor(hit.blockId), 1);
+        const fit = this.inventory.addItem(dropFor(hit.blockId), 1);
+        if (!fit) this.ui.showToast('Inventory full');
       }
     }
   }

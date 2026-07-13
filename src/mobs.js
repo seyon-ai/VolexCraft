@@ -26,10 +26,32 @@ const MIN_SPAWN_DIST = 10;
 const MAX_SPAWN_DIST = 22;
 const DESPAWN_DIST = (WorldSettings.RENDER_DISTANCE + 3) * WorldSettings.CHUNK_SIZE;
 
-function buildMobMesh(def) {
+// Where to look for user-supplied mob face images. Missing files just keep
+// the flat fallback color already used for the whole head.
+const MOB_FACE_PATH = 'assets/textures/mobs/';
+const MOB_FACE_FILES = {
+  [MobKind.COW]: 'cow_face.png',
+  [MobKind.PIG]: 'pig_face.png',
+  [MobKind.ZOMBIE]: 'zombie_face.png',
+  [MobKind.SKELETON]: 'skeleton_face.png',
+  [MobKind.CREEPER]: 'creeper_face.png',
+};
+const textureLoader = new THREE.TextureLoader();
+
+function loadMobFaceTexture(kind, onLoad) {
+  const filename = MOB_FACE_FILES[kind];
+  if (!filename) return;
+  textureLoader.load(
+    MOB_FACE_PATH + filename,
+    (texture) => { texture.magFilter = THREE.NearestFilter; texture.minFilter = THREE.NearestFilter; onLoad(texture); },
+    undefined,
+    () => { /* 404 or load error — silently keep the flat color fallback */ }
+  );
+}
+
+function buildMobMesh(def, kind) {
   const group = new THREE.Group();
   const bodyMat = new THREE.MeshLambertMaterial({ color: def.bodyColor });
-  const headMat = new THREE.MeshLambertMaterial({ color: def.headColor });
 
   const bodyHeight = def.height * 0.62;
   const body = new THREE.Mesh(new THREE.BoxGeometry(def.width, bodyHeight, def.width * 0.7), bodyMat);
@@ -37,11 +59,19 @@ function buildMobMesh(def) {
   body.castShadow = true;
   group.add(body);
 
+  // Head: 6 face materials in BoxGeometry's default [+x,-x,+y,-y,+z,-z] order.
+  // Only the front (+z) face gets swapped for a real texture if one loads;
+  // the rest stay a flat color.
   const headSize = def.width * 0.75;
-  const head = new THREE.Mesh(new THREE.BoxGeometry(headSize, headSize, headSize), headMat);
+  const flatHeadMat = () => new THREE.MeshLambertMaterial({ color: def.headColor });
+  const headMaterials = [flatHeadMat(), flatHeadMat(), flatHeadMat(), flatHeadMat(), flatHeadMat(), flatHeadMat()];
+  const head = new THREE.Mesh(new THREE.BoxGeometry(headSize, headSize, headSize), headMaterials);
   head.position.y = bodyHeight + def.height * 0.28 + headSize / 2;
   head.castShadow = true;
   group.add(head);
+  loadMobFaceTexture(kind, (texture) => {
+    headMaterials[4] = new THREE.MeshLambertMaterial({ map: texture });
+  });
 
   const legHeight = def.height * 0.28;
   const legMat = new THREE.MeshLambertMaterial({ color: def.bodyColor });
@@ -54,7 +84,7 @@ function buildMobMesh(def) {
     }
   }
 
-  if (def.explodes) { // creeper: small dark "face" accent
+  if (def.explodes) { // creeper: small dark "face" accent, visible even without an image
     const face = new THREE.Mesh(new THREE.BoxGeometry(headSize * 0.3, headSize * 0.3, 0.05), new THREE.MeshBasicMaterial({ color: 0x1a1a1a }));
     face.position.set(0, head.position.y, def.width * 0.36);
     group.add(face);
@@ -78,7 +108,7 @@ export class Mob {
     this.fuseTime = 0; // creeper explosion countdown once triggered
     this.fuseActive = false;
 
-    this.mesh = buildMobMesh(this.def);
+    this.mesh = buildMobMesh(this.def, kind);
     this.mesh.position.copy(this.position);
     scene.add(this.mesh);
   }

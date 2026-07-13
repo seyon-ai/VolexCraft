@@ -41,7 +41,7 @@
     <button id="btn-new-world" class="menu-button primary">New World</button>
     <button id="btn-continue" class="menu-button">Continue Saved World</button>
 
-    <p class="menu-hint">WASD move · Mouse look · Space jump (auto-step ledges) · Shift sprint · Left-click break/attack · Right-click place (or open crafting table / furnace) · E toggle mode · Double-tap Space to fly (Creative) · F3 debug · Mobile: joystick to move, tap the action button to place, hold to break</p>
+    <p class="menu-hint">WASD move · Mouse look · Space jump (auto-step ledges) · Shift sprint · Left-click break/attack · Right-click place (or eat food / open crafting table &amp; furnace) · E inventory · M toggle mode · Double-tap Space to fly (Creative) · F3 debug · Mobile: joystick to move, tap anywhere to place/eat, hold to break/attack where you're touching</p>
   </div>
 </div>
 
@@ -58,12 +58,17 @@
         <span id="time-label">Day</span>
       </div>
     </div>
-    <button id="btn-pause" class="icon-button" aria-label="Pause">II</button>
+    <div id="top-bar-right">
+      <button id="btn-inventory" class="icon-button" aria-label="Inventory">🎒</button>
+      <button id="btn-fullscreen" class="icon-button" aria-label="Fullscreen">⛶</button>
+      <button id="btn-pause" class="icon-button" aria-label="Pause">II</button>
+    </div>
   </div>
 
   <div id="debug-panel"></div>
 
   <div id="hotbar"></div>
+  <div id="toast"></div>
 </div>
 
 <!-- ===================== PAUSE / SETTINGS ===================== -->
@@ -99,6 +104,18 @@
   </div>
 </div>
 
+<!-- ===================== INVENTORY ===================== -->
+<div id="inventory-overlay" class="overlay" style="display:none;">
+  <div class="menu-panel wide">
+    <h2>Inventory</h2>
+    <div id="inventory-backpack-grid" class="inv-grid"></div>
+    <div id="inventory-hotbar-row" class="inv-grid inv-hotbar-row"></div>
+    <h3 class="inv-section-title">Crafting</h3>
+    <div id="inventory-crafting-list" class="recipe-list"></div>
+    <button id="btn-close-inventory" class="menu-button">Close</button>
+  </div>
+</div>
+
 <!-- ===================== CRAFTING / FURNACE ===================== -->
 <div id="crafting-overlay" class="overlay" style="display:none;">
   <div class="menu-panel wide">
@@ -122,7 +139,6 @@
   <div id="joystick-zone"></div>
   <div id="joystick-base"><div id="joystick-thumb"></div></div>
   <div id="action-buttons">
-    <button id="btn-action" class="touch-button action-btn" aria-label="Tap to place, hold to break"></button>
     <button id="btn-jump" class="touch-button jump">Jump</button>
   </div>
 </div>

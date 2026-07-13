@@ -2,24 +2,30 @@
 // same neutral input snapshot (poll()) so Game never needs to know which
 // input scheme is active.
 //
-// Two deliberate UX choices here:
+// Three deliberate UX choices here:
 //  - The joystick is "floating": its huge invisible hit-zone covers the
 //    whole bottom-left half of the screen, and the visible base/thumb jump
 //    to wherever the player actually touches down, instead of forcing them
 //    to hit one small fixed circle.
-//  - Break and place share a single circular action button: a quick tap
-//    places, holding it down starts breaking (with the same per-mode break
-//    speed used on desktop).
+//  - There is no fixed break/place button. Touching anywhere on the rest of
+//    the screen aims at that exact point: a quick tap places a block there,
+//    holding still breaks (or attacks a mob) there. If the finger drags
+//    past a small threshold before that decision is made, it's reinterpreted
+//    as a camera look-drag instead — so look and aim share one gesture.
+//  - Main.js reads `aimScreen` (screen-space point) when present instead of
+//    the camera-forward ray, so break/place/attack target wherever was
+//    actually touched rather than always screen-center.
 
 import { MobileSettings } from './settings.js';
 
 const JOYSTICK_RADIUS = 60; // px, visual + logical clamp radius (floating base)
-const HOLD_THRESHOLD_MS = 180; // press-and-hold longer than this = "break", shorter = "place"
+const HOLD_THRESHOLD_MS = 220; // press-and-hold longer than this = "break/attack", shorter = "place/eat"
+const MOVE_THRESHOLD_PX = 14; // drag further than this before the hold threshold = camera look, not aim
 
 export class MobileControls {
   constructor(game, elements) {
     this.game = game;
-    this.el = elements; // { joystickZone, joystickBase, joystickThumb, lookZone, btnAction, btnJump }
+    this.el = elements; // { joystickZone, joystickBase, joystickThumb, lookZone, btnJump }
 
     this.yaw = 0;
     this.pitch = 0;
@@ -27,17 +33,13 @@ export class MobileControls {
 
     this._joystickPointerId = null;
     this._joystickCenter = { x: 0, y: 0 };
-    this._lookPointerId = null;
-    this._lookLast = { x: 0, y: 0 };
     this._lastJumpTapTime = -Infinity;
 
     this.jumpHeld = false;
     this._jumpQueued = false;
 
-    this._actionPointerId = null;
-    this._actionDownTime = 0;
-    this.breakHeld = false;
-    this._placeQueued = false;
+    this._touch = null; // { pointerId, startX, startY, curX, curY, startTime, movedPastThreshold }
+    this._placeQueued = null; // {x,y} screen point, or null
 
     this._bindJoystick();
     this._bindLook();
@@ -91,32 +93,67 @@ export class MobileControls {
     this.moveVector = { x: nx, y: ny };
   }
 
+  /** The combined look-drag / tap-to-place / hold-to-break gesture. */
   _bindLook() {
     const zone = this.el.lookZone;
+
     zone.addEventListener('pointerdown', (e) => {
       if (e.pointerId === this._joystickPointerId) return;
-      this._lookPointerId = e.pointerId;
-      this._lookLast = { x: e.clientX, y: e.clientY };
+      if (this._touch) return; // only track one aim/look touch at a time
+      this._touch = {
+        pointerId: e.pointerId,
+        startX: e.clientX, startY: e.clientY,
+        curX: e.clientX, curY: e.clientY,
+        startTime: performance.now(),
+        movedPastThreshold: false,
+      };
       zone.setPointerCapture(e.pointerId);
     });
+
     zone.addEventListener('pointermove', (e) => {
-      if (e.pointerId !== this._lookPointerId) return;
-      const dx = e.clientX - this._lookLast.x;
-      const dy = e.clientY - this._lookLast.y;
-      this._lookLast = { x: e.clientX, y: e.clientY };
+      const t = this._touch;
+      if (!t || e.pointerId !== t.pointerId) return;
+
+      if (!t.movedPastThreshold) {
+        const dist = Math.hypot(e.clientX - t.startX, e.clientY - t.startY);
+        if (dist > MOVE_THRESHOLD_PX) {
+          t.movedPastThreshold = true; // reclassify as a look-drag from here on
+          t.curX = e.clientX; t.curY = e.clientY;
+          return;
+        }
+        t.curX = e.clientX; t.curY = e.clientY;
+        return;
+      }
+
+      const dx = e.clientX - t.curX;
+      const dy = e.clientY - t.curY;
+      t.curX = e.clientX; t.curY = e.clientY;
       const sens = MobileSettings.lookSensitivity * (this.game._sensitivityMultiplier || 1);
       this.yaw -= dx * sens;
       this.pitch -= dy * sens;
       this.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, this.pitch));
     });
+
     const release = (e) => {
-      if (e.pointerId === this._lookPointerId) this._lookPointerId = null;
+      const t = this._touch;
+      if (!t || e.pointerId !== t.pointerId) return;
+      const heldMs = performance.now() - t.startTime;
+      if (!t.movedPastThreshold && heldMs < HOLD_THRESHOLD_MS) {
+        this._placeQueued = { x: t.curX, y: t.curY }; // quick tap-in-place = place/eat
+      }
+      this._touch = null;
     };
     zone.addEventListener('pointerup', release);
     zone.addEventListener('pointercancel', release);
   }
 
   _bindButtons() {
+    const down = (el, handler) => el.addEventListener('pointerdown', (e) => { e.preventDefault(); handler(e); });
+    const up = (el, handler) => {
+      el.addEventListener('pointerup', (e) => { e.preventDefault(); handler(e); });
+      el.addEventListener('pointercancel', (e) => { e.preventDefault(); handler(e); });
+    };
+
     down(this.el.btnJump, () => {
       this.jumpHeld = true;
       this._jumpQueued = true;
@@ -125,37 +162,28 @@ export class MobileControls {
       this._lastJumpTapTime = now;
     });
     up(this.el.btnJump, () => { this.jumpHeld = false; });
-
-    down(this.el.btnAction, (e) => {
-      this._actionPointerId = e.pointerId;
-      this._actionDownTime = performance.now();
-    });
-    up(this.el.btnAction, (e) => {
-      if (this._actionPointerId !== null && e.pointerId !== this._actionPointerId) return;
-      const held = performance.now() - this._actionDownTime;
-      if (held < HOLD_THRESHOLD_MS) this._placeQueued = true;
-      this._actionPointerId = null;
-      this.breakHeld = false;
-    });
-
-    function down(el, handler) { el.addEventListener('pointerdown', (e) => { e.preventDefault(); handler(e); }); }
-    function up(el, handler) {
-      el.addEventListener('pointerup', (e) => { e.preventDefault(); handler(e); });
-      el.addEventListener('pointercancel', (e) => { e.preventDefault(); handler(e); });
-    }
   }
 
   poll() {
-    // Re-derive breakHeld from elapsed hold time every frame (not just on
-    // events) so it stays true continuously while the button is held down.
-    if (this._actionPointerId !== null) {
-      this.breakHeld = (performance.now() - this._actionDownTime) >= HOLD_THRESHOLD_MS;
-    }
-
     const jumpPressed = this._jumpQueued;
     this._jumpQueued = false;
-    const placePressed = this._placeQueued;
-    this._placeQueued = false;
+
+    let breakHeld = false;
+    let aimScreen = null;
+    if (this._touch && !this._touch.movedPastThreshold) {
+      const heldMs = performance.now() - this._touch.startTime;
+      if (heldMs >= HOLD_THRESHOLD_MS) {
+        breakHeld = true;
+        aimScreen = { x: this._touch.curX, y: this._touch.curY };
+      }
+    }
+
+    let placePressed = false;
+    if (this._placeQueued) {
+      placePressed = true;
+      aimScreen = this._placeQueued;
+      this._placeQueued = null;
+    }
 
     return {
       forward: -this.moveVector.y,
@@ -164,9 +192,11 @@ export class MobileControls {
       yaw: this.yaw,
       pitch: this.pitch,
       jumpPressed,
-      breakHeld: this.breakHeld,
+      breakHeld,
       placePressed,
+      aimScreen,
     };
   }
 }
+
 

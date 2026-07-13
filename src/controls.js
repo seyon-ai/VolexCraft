@@ -56,7 +56,11 @@ export class DesktopControls {
         const n = parseInt(e.code.replace('Digit', ''), 10);
         if (n >= 1 && n <= 9) this.game.inventory.select(n - 1);
       }
-      if (e.code === 'KeyE') this.game.onToggleGameModeRequested();
+      if (e.code === 'KeyE') {
+        if (this.game._openPanel === 'inventory') this.game._closePanel();
+        else this.game._openInventoryScreen();
+      }
+      if (e.code === 'KeyM') this.game.onToggleGameModeRequested();
       if (e.code === 'Escape') {
         if (this.game._openPanel) this.game._closePanel();
         else document.exitPointerLock();

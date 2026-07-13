@@ -151,10 +151,31 @@ export class Chunk {
     return isTransparent(neighborId);
   }
 
-  /** Rebuilds solid + water meshes from current voxel data and swaps them into the scene group. */
+  /** Two crossed vertical quads (Minecraft-style plant billboard) instead of a full cube. */
+  static addCutoutQuads(target, wx, ly, wz, tile) {
+    const [u0, v0, u1, v1] = tileUV(tile);
+    const uvCorners = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
+    const addQuad = (corners) => {
+      const start = target.positions.length / 3;
+      for (let i = 0; i < 4; i++) {
+        const [cx, cy, cz] = corners[i];
+        target.positions.push(wx + cx, ly + cy, wz + cz);
+        target.normals.push(0, 1, 0);
+        target.uvs.push(uvCorners[i][0], uvCorners[i][1]);
+      }
+      // Both winding orders so the plane reads correctly from either side.
+      target.indices.push(start, start + 1, start + 2, start, start + 2, start + 3);
+      target.indices.push(start, start + 2, start + 1, start, start + 3, start + 2);
+    };
+    addQuad([[0.1, 0, 0.1], [0.9, 0, 0.9], [0.9, 1, 0.9], [0.1, 1, 0.1]]);
+    addQuad([[0.9, 0, 0.1], [0.1, 0, 0.9], [0.1, 1, 0.9], [0.9, 1, 0.1]]);
+  }
+
+  /** Rebuilds solid + water + cutout meshes from current voxel data and swaps them into the scene group. */
   buildMesh(atlasTexture) {
     const solid = { positions: [], normals: [], uvs: [], indices: [] };
     const water = { positions: [], normals: [], uvs: [], indices: [] };
+    const cutout = { positions: [], normals: [], uvs: [], indices: [] };
     const ox = this.worldOriginX();
     const oz = this.worldOriginZ();
 
@@ -164,6 +185,12 @@ export class Chunk {
           const id = this.getBlockLocal(lx, ly, lz);
           if (id === BlockId.AIR) continue;
           const def = BlockRegistry[id];
+
+          if (def.cutout) {
+            Chunk.addCutoutQuads(cutout, ox + lx, ly, oz + lz, def.faces[0]);
+            continue;
+          }
+
           const target = isLiquid(id) ? water : solid;
 
           for (const face of FACES) {
@@ -190,11 +217,12 @@ export class Chunk {
       }
     }
 
-    this._applyGeometry('solidMesh', solid, atlasTexture, false);
-    this._applyGeometry('waterMesh', water, atlasTexture, true);
+    this._applyGeometry('solidMesh', solid, atlasTexture, 'solid');
+    this._applyGeometry('waterMesh', water, atlasTexture, 'water');
+    this._applyGeometry('cutoutMesh', cutout, atlasTexture, 'cutout');
   }
 
-  _applyGeometry(meshField, data, atlasTexture, isWater) {
+  _applyGeometry(meshField, data, atlasTexture, kind) {
     if (this[meshField]) {
       this[meshField].geometry.dispose();
       if (data.positions.length === 0) {
@@ -215,12 +243,17 @@ export class Chunk {
       return;
     }
 
-    const material = isWater
-      ? new THREE.MeshLambertMaterial({ map: atlasTexture, transparent: true, opacity: 0.75, depthWrite: false })
-      : new THREE.MeshLambertMaterial({ map: atlasTexture });
+    let material;
+    if (kind === 'water') {
+      material = new THREE.MeshLambertMaterial({ map: atlasTexture, transparent: true, opacity: 0.75, depthWrite: false });
+    } else if (kind === 'cutout') {
+      material = new THREE.MeshLambertMaterial({ map: atlasTexture, transparent: true, alphaTest: 0.4, side: THREE.DoubleSide });
+    } else {
+      material = new THREE.MeshLambertMaterial({ map: atlasTexture });
+    }
 
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.castShadow = !isWater;
+    mesh.castShadow = kind === 'solid';
     mesh.receiveShadow = true;
     mesh.matrixAutoUpdate = false;
     mesh.updateMatrix();
@@ -229,15 +262,12 @@ export class Chunk {
   }
 
   dispose() {
-    if (this.solidMesh) {
-      this.world.scene.remove(this.solidMesh);
-      this.solidMesh.geometry.dispose();
-      this.solidMesh = null;
-    }
-    if (this.waterMesh) {
-      this.world.scene.remove(this.waterMesh);
-      this.waterMesh.geometry.dispose();
-      this.waterMesh = null;
+    for (const field of ['solidMesh', 'waterMesh', 'cutoutMesh']) {
+      if (this[field]) {
+        this.world.scene.remove(this[field]);
+        this[field].geometry.dispose();
+        this[field] = null;
+      }
     }
   }
 }

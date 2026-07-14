@@ -3,7 +3,7 @@
 // the same height/biome/tree result, which is what makes infinite terrain and
 // re-visiting old chunks safe.
 
-import { SimplexNoise, mulberry32, clamp } from './utils.js';
+import { SimplexNoise, clamp } from './utils.js';
 import { BlockId } from './block.js';
 import { WorldSettings } from './settings.js';
 
@@ -16,6 +16,20 @@ export const Biome = {
   SNOWY_PLAINS: 'snowy_plains',
   MOUNTAINS: 'mountains',
 };
+
+/**
+ * Allocation-free deterministic hash -> [0,1). This is called up to tens of
+ * thousands of times per chunk (once per candidate ore voxel), so it must be
+ * pure arithmetic with zero object/closure allocation — a previous version
+ * called `mulberry32(seed)()`, which allocates a new closure per call and
+ * was the main cause of stutter every time new terrain generated.
+ */
+function hash4(a, b, c, d) {
+  let h = (a ^ Math.imul(b, 374761393) ^ Math.imul(c, 668265263) ^ Math.imul(d, 2654435761)) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), h | 1);
+  h = (h + Math.imul(h ^ (h >>> 7), h | 61)) ^ h;
+  return ((h ^ (h >>> 14)) >>> 0) / 4294967296;
+}
 
 export class TerrainGenerator {
   constructor(seed) {
@@ -70,7 +84,7 @@ export class TerrainGenerator {
     const density = biome === Biome.FOREST ? 0.965 : 0.994;
     const n = (this.treeNoise.noise2D(x * 0.9, z * 0.9) + 1) / 2;
     // Mix in a hash so trees don't align visibly with the noise field's grid.
-    const h = mulberry32((this.seed ^ (x * 374761393) ^ (z * 668265263)) >>> 0)();
+    const h = hash4(this.seed, x, z, 707);
     return n * 0.5 + h * 0.5 > density;
   }
 
@@ -99,7 +113,7 @@ export class TerrainGenerator {
 
   /** Deterministic 0..1 roll for a specific voxel coordinate (ore placement, decoration). */
   voxelRoll(x, y, z, salt = 0) {
-    return mulberry32((this.seed ^ (x * 374761393) ^ (y * 668265263) ^ (z * 2147483647) ^ salt) >>> 0)();
+    return hash4(this.seed ^ salt, x, y, z);
   }
 
   /** Returns an ore BlockId to substitute for stone at this coordinate, or null. Depth-banded rarity. */
@@ -135,7 +149,7 @@ export class TerrainGenerator {
     }
     if (biome === Biome.PLAINS || biome === Biome.FOREST) {
       if (r < 0.0015) return BlockId.PUMPKIN;
-      if (r < 0.38) return BlockId.TALL_GRASS;
+      if (r < 0.10) return BlockId.TALL_GRASS; // was 0.38 — way too dense
       return null;
     }
     return null;

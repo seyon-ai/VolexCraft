@@ -59,11 +59,21 @@ export class Chunk {
     const ox = this.worldOriginX();
     const oz = this.worldOriginZ();
 
+    // Compute each column's terrain data exactly once — getColumn() runs
+    // several octaves of noise, so recomputing it per-pass (fill/decoration/
+    // tree) instead of caching it here was tripling generation cost.
+    const columns = new Array(CHUNK_SIZE * CHUNK_SIZE);
+    for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+      for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+        columns[lx + lz * CHUNK_SIZE] = terrainGenerator.getColumn(ox + lx, oz + lz);
+      }
+    }
+
     for (let lx = 0; lx < CHUNK_SIZE; lx++) {
       for (let lz = 0; lz < CHUNK_SIZE; lz++) {
         const wx = ox + lx;
         const wz = oz + lz;
-        const { height, biome } = terrainGenerator.getColumn(wx, wz);
+        const { height, biome } = columns[lx + lz * CHUNK_SIZE];
         this.heightMap[lx + lz * CHUNK_SIZE] = height;
 
         const surface = terrainGenerator.surfaceBlockFor(biome);
@@ -84,13 +94,13 @@ export class Chunk {
       }
     }
 
-    // Surface decoration (flowers/grass/cactus/pumpkin) — skipped on columns
-    // that will grow a tree, and only above sea level.
+    // Surface decoration (grass/cactus/pumpkin) — skipped on columns that
+    // will grow a tree, and only above sea level.
     for (let lx = 0; lx < CHUNK_SIZE; lx++) {
       for (let lz = 0; lz < CHUNK_SIZE; lz++) {
         const wx = ox + lx;
         const wz = oz + lz;
-        const { height, biome, tree } = terrainGenerator.getColumn(wx, wz);
+        const { height, biome, tree } = columns[lx + lz * CHUNK_SIZE];
         if (tree || height <= WorldSettings.SEA_LEVEL) continue;
         const deco = terrainGenerator.decorationAt(wx, wz, biome, height);
         if (deco !== null && this.getBlockLocal(lx, height + 1, lz) === BlockId.AIR) {
@@ -104,9 +114,7 @@ export class Chunk {
     const MARGIN = 2;
     for (let lx = MARGIN; lx < CHUNK_SIZE - MARGIN; lx++) {
       for (let lz = MARGIN; lz < CHUNK_SIZE - MARGIN; lz++) {
-        const wx = ox + lx;
-        const wz = oz + lz;
-        const { height, biome, tree } = terrainGenerator.getColumn(wx, wz);
+        const { height, tree } = columns[lx + lz * CHUNK_SIZE];
         if (tree && height > WorldSettings.SEA_LEVEL) {
           this.placeTree(lx, height + 1, lz);
         }

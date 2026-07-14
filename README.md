@@ -2,6 +2,19 @@
 
 A browser-based voxel game (Three.js, ES modules, no build step, no backend).
 
+## What's new in V4
+
+**Performance fix (the "stuttering while playing" issue)**
+- Found and fixed the real cause: ore/tree placement was calling a seeded-RNG constructor (`mulberry32(seed)()`) for **every candidate stone voxel** — tens of thousands of throwaway function objects allocated per chunk. That's expensive to allocate and expensive to garbage-collect, and it re-ran constantly as you walked into new terrain. Replaced it with a pure-arithmetic hash with zero allocation.
+- Also found chunk generation was computing each column's height/biome/tree data **three separate times** (once per generation pass) instead of once and reusing it — now cached.
+- Beyond that, chunk *generation* itself (not just the mesh-building step) is now spread across multiple frames instead of generating an entire newly-revealed ring of chunks synchronously the moment you cross a chunk boundary. Benchmarked before/after: worst-case frame time while continuously walking through new terrain dropped from ~29ms (well over the 16.7ms budget for 60fps — a dropped frame every time) to consistently under 16ms.
+
+**Other fixes from this round**
+- Tall grass density cut way down (was spawning in ~38% of eligible ground columns — down to ~10%).
+- The joystick's touch zone was too large and ate into the center of the screen, making it impossible to tap-aim at mobs there. Shrunk it down to the bottom-left corner only.
+
+**Note on this zip:** it does **not** include the `assets/` folder, so it won't overwrite whatever you've already put there — just keep using your existing `assets/textures/blocks|items|mobs/` folders alongside these updated source files.
+
 ## What's new in V3
 
 **Bug fixes**

@@ -21,6 +21,7 @@ export class World {
     this.modifications = new Map(); // "x,y,z" -> blockId, world-space player edits only
     this.atlasTexture = buildTextureAtlas();
     this.buildQueue = [];
+    this.loadQueue = [];
     this.renderDistance = WorldSettings.RENDER_DISTANCE;
     this.lastPlayerChunk = { cx: null, cz: null };
   }
@@ -133,18 +134,18 @@ export class World {
     if (pcx !== this.lastPlayerChunk.cx || pcz !== this.lastPlayerChunk.cz) {
       this.lastPlayerChunk = { cx: pcx, cz: pcz };
       const rd = this.renderDistance;
-      const wanted = new Set();
       const toLoad = [];
       for (let dx = -rd; dx <= rd; dx++) {
         for (let dz = -rd; dz <= rd; dz++) {
           if (dx * dx + dz * dz > rd * rd) continue;
           const cx = pcx + dx, cz = pcz + dz;
-          wanted.add(keyForChunk(cx, cz));
           if (!this.chunks.has(keyForChunk(cx, cz))) toLoad.push({ cx, cz, dist: dx * dx + dz * dz });
         }
       }
       toLoad.sort((a, b) => a.dist - b.dist);
-      for (const { cx, cz } of toLoad) this.loadChunk(cx, cz);
+      // Replace (don't append to) the pending queue — priority order is
+      // always recomputed fresh from the player's current position.
+      this.loadQueue = toLoad;
 
       const unloadDist = (rd + 2) * (rd + 2);
       for (const key of Array.from(this.chunks.keys())) {
@@ -152,6 +153,15 @@ export class World {
         const dx = chunk.cx - pcx, dz = chunk.cz - pcz;
         if (dx * dx + dz * dz > unloadDist) this.unloadChunk(chunk.cx, chunk.cz);
       }
+    }
+
+    // Generation is throttled the same way mesh building is: a synchronous
+    // burst of chunk generation for an entire newly-revealed ring is what
+    // caused a stutter every time the player crossed a chunk boundary, even
+    // though each individual chunk only takes ~1-2ms.
+    for (let i = 0; i < WorldSettings.CHUNKS_LOADED_PER_FRAME && this.loadQueue.length > 0; i++) {
+      const { cx, cz } = this.loadQueue.shift();
+      if (!this.chunks.has(keyForChunk(cx, cz))) this.loadChunk(cx, cz);
     }
 
     for (let i = 0; i < WorldSettings.CHUNKS_BUILT_PER_FRAME && this.buildQueue.length > 0; i++) {

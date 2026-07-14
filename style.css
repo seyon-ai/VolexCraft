@@ -247,11 +247,12 @@ html, body {
 
 #mobile-controls { position: absolute; inset: 0; z-index: 20; pointer-events: none; }
 
-/* Large invisible hit-zone: touching anywhere in the bottom-left ~half of
-   the screen summons the joystick right where the thumb landed. Stops short
-   of the hotbar strip so it never competes with hotbar taps. */
+/* Invisible hit-zone: touching anywhere in the bottom-left corner summons
+   the joystick right where the thumb landed. Kept fairly small and corner-
+   confined so it doesn't eat into the center/right of the screen, which
+   needs to stay free for tap-to-aim (placing/breaking/hitting mobs). */
 #joystick-zone {
-  position: absolute; left: 0; bottom: 76px; width: 58%; height: 60%;
+  position: absolute; left: 0; bottom: 76px; width: 38%; height: 38%;
   pointer-events: auto; touch-action: none;
 }
 #joystick-base {

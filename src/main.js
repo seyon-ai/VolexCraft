@@ -401,6 +401,7 @@ class Game {
     this.camera.position.copy(this.player.getEyePosition());
     this.camera.rotation.y = yaw;
     this.camera.rotation.x = pitch;
+    this.camera.updateMatrixWorld(); // so the touch-to-aim raycaster below sees this frame's pose, not last frame's
 
     this.world.update(this.player.position.x, this.player.position.z);
     this.timeSystem.update(dt, this.player.position);

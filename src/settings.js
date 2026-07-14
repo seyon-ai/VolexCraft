@@ -10,6 +10,7 @@ export const WorldSettings = {
   MAX_RENDER_DISTANCE: 10,
   MIN_RENDER_DISTANCE: 2,
   CHUNKS_BUILT_PER_FRAME: 1, // throttles chunk mesh builds to avoid frame drops
+  CHUNKS_LOADED_PER_FRAME: 2, // throttles chunk *generation* (noise+ore) — the actual fix for boundary-crossing stutter
 };
 
 export const GraphicsSettings = {

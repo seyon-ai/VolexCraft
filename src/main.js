@@ -16,6 +16,7 @@ import { SaveSystem } from './saveSystem.js';
 import { BlockId, dropFor, isUnbreakable, requiredPickaxeTier, interactiveKind } from './block.js';
 import { pickaxeTier, weaponDamage, isFood, foodHealAmount } from './items.js';
 import { MobManager } from './mobs.js';
+import { DroppedItemManager } from './droppedItems.js';
 import { CRAFTING_RECIPES, SMELTING_RECIPES, craftOnce, smeltOnce } from './crafting.js';
 import { GraphicsSettings, WorldSettings, isMobileDevice } from './settings.js';
 import { hashStringSeed } from './utils.js';
@@ -145,6 +146,7 @@ class Game {
       this.controls.yaw = data.player.yaw || 0;
       this.controls.pitch = data.player.pitch || 0;
       this.player.health = data.player.health ?? this.player.maxHealth;
+      this.player.hunger = data.player.hunger ?? this.player.maxHunger;
     }
     this.inventory.loadFrom(data.inventory);
     this.timeSystem.setTime(data.time ?? 0.3);
@@ -166,11 +168,13 @@ class Game {
     this.inventory = new Inventory(this.gameMode);
     this.timeSystem = new TimeSystem(this.scene);
     this.mobManager = new MobManager(this.scene, this.world);
+    this.droppedItemManager = new DroppedItemManager(this.scene, this.world);
 
     this.gameMode.onChange((m) => {
       this.player.flying = false;
       this.ui.updateModeLabel(m);
       this.ui.updateHealth(this.player.health, this.player.maxHealth, this.gameMode.isSurvival());
+      this.ui.updateHunger(this.player.hunger, this.player.maxHunger, this.gameMode.isSurvival());
     });
 
     this.ui.setSettingsValues({
@@ -190,6 +194,7 @@ class Game {
       );
     }
     if (this.mobManager) this.mobManager.disposeAll();
+    if (this.droppedItemManager) this.droppedItemManager.disposeAll();
   }
 
   _afterWorldReady() {
@@ -407,12 +412,20 @@ class Game {
     this.timeSystem.update(dt, this.player.position);
     this.player.gameModeCanTakeDamage = this.gameMode.canTakeDamage();
     this.mobManager.update(dt, this.player, this.timeSystem.isNight(), (mob) => {
-      if (this.gameMode.isSurvival() && mob.def.drop) this.inventory.addItem(mob.def.drop, 1);
+      if (this.gameMode.isSurvival() && mob.def.drop) {
+        this.droppedItemManager.spawn(mob.def.drop, 1, mob.position);
+      }
+    });
+    this.droppedItemManager.update(dt, this.player, (id, count) => {
+      const fit = this.inventory.addItem(id, count);
+      if (!fit) this.ui.showToast('Inventory full');
+      return fit;
     });
 
     this._updateTargetedBlock(input, dt);
 
     this.ui.updateHealth(this.player.health, this.player.maxHealth, this.gameMode.isSurvival());
+    this.ui.updateHunger(this.player.hunger, this.player.maxHunger, this.gameMode.isSurvival());
     this.ui.updateHotbar(this.inventory);
     this.ui.updateTimeLabel(this.timeSystem.getPhaseLabel());
     this.ui.updateBreakProgress(this._breakFraction || 0);
@@ -501,11 +514,11 @@ class Game {
   }
 
   _eatSelected() {
-    if (this.player.health >= this.player.maxHealth) return; // no reason to eat at full health
+    if (this.player.hunger >= this.player.maxHunger) return; // no reason to eat when full
     const id = this.inventory.getSelectedBlockId();
     const heal = foodHealAmount(id);
     if (heal <= 0) return;
-    if (this.inventory.consumeSelected()) this.player.heal(heal);
+    if (this.inventory.consumeSelected()) this.player.restoreHunger(heal);
   }
 
   _breakBlock(hit) {
@@ -515,8 +528,7 @@ class Game {
       const requiredTier = requiredPickaxeTier(hit.blockId);
       const haveTier = pickaxeTier(this.inventory.getSelectedBlockId());
       if (requiredTier === 0 || haveTier >= requiredTier) {
-        const fit = this.inventory.addItem(dropFor(hit.blockId), 1);
-        if (!fit) this.ui.showToast('Inventory full');
+        this.droppedItemManager.spawn(dropFor(hit.blockId), 1, new THREE.Vector3(x + 0.5, y + 0.3, z + 0.5));
       }
     }
   }

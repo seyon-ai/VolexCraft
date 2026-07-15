@@ -2,6 +2,23 @@
 
 A browser-based voxel game (Three.js, ES modules, no build step, no backend).
 
+## What's new in V5
+
+**The "freeze after playing a while" bug — found and fixed**
+The real cause: mob heads use a 6-material array (one per face, for the face-texture system), and the disposal code called `.dispose()` directly on that array. Arrays don't have a `.dispose()` method, so the moment *any* mob died or wandered out of range, this threw — and because it threw *inside* the `.filter()` call that removes dead mobs from the list, the exception aborted that filter entirely, leaving the dead mob in the array. Every subsequent frame hit the exact same crash on the exact same mob, forever. Critically, the crash happened *after* player physics and camera position already updated for that frame but *before* the renderer's `render()` call — so the canvas froze while the joystick (a separate DOM element, unaffected by the crashed render loop) kept responding, and the player's position kept quietly changing in memory without ever being drawn. Exactly the symptom described. Verified with a reproduction test before and after the fix.
+
+**New gameplay systems**
+- **Physical dropped items** — blocks and mobs now drop a real, physical item (a small bobbing/spinning cube) you walk over to collect, instead of loot teleporting straight into your inventory. Nearby stacks of the same item merge together, items despawn after 90s if left on the ground.
+- **Caves** — real 3D-noise-carved tunnels and caverns (added proper 3D simplex noise, which the engine didn't have before — it only had 2D). Two noise fields combined: a blobby "cavern" field for open pockets and a ridged "worm" field for connecting tunnels.
+- **Connected ore veins** — ore placement switched from independent-probability scattered blocks to 3D-noise-threshold clustering, so ore now forms actual connected blobs/veins like a real voxel game, not scattered singles. Thresholds were empirically calibrated against the noise distribution (an earlier pass had ~17% of all stone turning into ore — now tuned to a realistic ~4-5%).
+- **Hunger bar** — drains slowly over time (faster while sprinting), fuels passive health regen once reasonably fed, causes slow starvation damage at zero, and blocks sprinting when empty. Eating now restores hunger rather than healing directly, so cooked food matters again instead of being a flat heal button.
+
+**Performance**
+- Chunk generation got noticeably heavier from caves + ore veins (going from a pure hash-lookup to real 3D noise sampling). Benchmarked and retuned: single-octave noise instead of 2-octave where it didn't visibly matter, narrowed the Y-range caves get checked in, and dropped the per-frame chunk-generation throttle to 1 (from 2) to keep worst-case frame time in check. Steady-state median frame time while exploring new terrain is ~7ms; occasional worst-case spikes near ~20ms are possible when several heavy chunks line up, which is a minor hitch, not the sustained stutter from before.
+- Also fixed a real latent bug found while working on this: `PLACEABLE_BLOCKS` still referenced the two flower block ids removed in V3, which meant Creative mode's inventory fill silently included two broken `undefined` slots.
+
+**Still in progress:** the full "cinematic visuals" pass (bloom, tone mapping, better water, weather, clouds, sky flourishes, graphics presets) from your Voltx Craft brief — that's a large, separate chunk of work and will follow in the next update.
+
 ## What's new in V4
 
 **Performance fix (the "stuttering while playing" issue)**
@@ -70,13 +87,14 @@ creeper_face.png
 
 ## Known simplifications (given scope) — worth knowing about, not necessarily bugs
 
-- Ore veins are single scattered blocks (depth-weighted probability), not connected clusters.
 - Cactus and pumpkin are still full solid cubes (only tall grass got the billboard treatment).
-- Mob kills and block breaks grant items straight to your inventory — there's no physical "dropped item on the ground" you walk over to collect.
+- Dropped items are simple flat-colored cubes, not textured to look like the actual block/item.
+- Cave entrances never breach the surface directly — caves only carve the deep stone region, so you won't stumble into one just walking around; you have to dig down to find them.
 - Creative mode now has all 26 placeable block types spread across the hotbar + backpack (not just 9), but backpack slots are otherwise fixed/infinite in Creative — you can't rearrange them.
 - Furnace/crafting-table smelting and crafting are instant-per-click (rate-limited by needing fuel each time), not a real-time progress bar you can walk away from. The crafting grid in the Inventory screen offers every recipe, not just ones that'd require a table in real Minecraft.
 - Clicking a slot in the Inventory screen swaps it with your currently-selected hotbar slot (a simple "quick move") rather than full drag-and-drop.
 - Skeletons use a simplified straight-line ranged "shot" rather than a visible arrow projectile.
+- No hunger *icon depletion animation* or food-poisoning-style mechanics — hunger is a straightforward drain/regen/starve loop.
 
 ## Run locally
 

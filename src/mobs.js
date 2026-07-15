@@ -233,7 +233,11 @@ export class Mob {
 
   dispose(scene) {
     scene.remove(this.mesh);
-    this.mesh.traverse((obj) => { if (obj.geometry) obj.geometry.dispose(); if (obj.material) obj.material.dispose(); });
+    this.mesh.traverse((obj) => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose());
+      else if (obj.material) obj.material.dispose();
+    });
   }
 }
 

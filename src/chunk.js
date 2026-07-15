@@ -84,6 +84,7 @@ export class Chunk {
           if (y === 0) id = BlockId.BEDROCK;
           else if (y === height) id = surface;
           else if (y > height - 4) id = subSurface;
+          else if (terrainGenerator.isCave(wx, y, wz)) id = BlockId.AIR;
           else id = terrainGenerator.pickOre(wx, y, wz) || BlockId.STONE;
           this.setBlockLocal(lx, y, lz, id);
         }

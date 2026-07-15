@@ -22,6 +22,12 @@ export class Player {
     this.health = 20;
     this.isDead = false;
 
+    this.maxHunger = 20;
+    this.hunger = 20;
+    this._hungerDrainAccum = 0;
+    this._regenTimer = 0;
+    this._starveTimer = 0;
+
     this._fallStartY = null;
     this.eventLog = []; // simple queue UI can drain (damage taken, death, etc.)
 
@@ -127,9 +133,11 @@ export class Player {
     const settings = PlayerSettings;
     this.flying = gameMode === 'creative' && this.flying;
 
+    const canSprint = gameMode !== 'survival' || this.hunger > 0;
+    const sprinting = this.sprinting && canSprint;
     const speed = this.flying
-      ? (this.sprinting ? settings.flySprintSpeed : settings.flySpeed)
-      : (this.sprinting ? settings.sprintSpeed : settings.walkSpeed);
+      ? (sprinting ? settings.flySprintSpeed : settings.flySpeed)
+      : (sprinting ? settings.sprintSpeed : settings.walkSpeed);
 
     // Horizontal velocity is directly driven by input (arcade-style, not accel-based)
     // for crisp, responsive controls that feel right for a voxel game.
@@ -182,6 +190,46 @@ export class Player {
       this._stepVisualOffset += (0 - this._stepVisualOffset) * ease;
       if (Math.abs(this._stepVisualOffset) < 0.002) this._stepVisualOffset = 0;
     }
+
+    if (gameMode === 'survival') this._updateHunger(dt, sprinting);
+  }
+
+  /** Hunger drains slowly over time (faster while sprinting), fuels passive
+   * health regen once it's reasonably high, and causes slow starvation damage
+   * once it hits zero — eating food restores it (see restoreHunger). */
+  _updateHunger(dt, sprinting) {
+    const drainPerSecond = sprinting ? 1 / 25 : 1 / 90;
+    this._hungerDrainAccum += dt * drainPerSecond;
+    while (this._hungerDrainAccum >= 1) {
+      this._hungerDrainAccum -= 1;
+      this.hunger = Math.max(0, this.hunger - 1);
+    }
+
+    if (this.hunger >= 7 && this.health < this.maxHealth) {
+      this._regenTimer += dt;
+      if (this._regenTimer >= 4) {
+        this._regenTimer = 0;
+        this.heal(1);
+        this.hunger = Math.max(0, this.hunger - 1); // passive regen costs hunger
+      }
+    } else {
+      this._regenTimer = 0;
+    }
+
+    if (this.hunger <= 0) {
+      this._starveTimer += dt;
+      if (this._starveTimer >= 4) {
+        this._starveTimer = 0;
+        this.damage(1);
+      }
+    } else {
+      this._starveTimer = 0;
+    }
+  }
+
+  /** Eating food restores hunger (health regen is fueled by hunger, not healed directly). */
+  restoreHunger(amount) {
+    this.hunger = clamp(this.hunger + amount, 0, this.maxHunger);
   }
 
   applyFallDamage(fallDistance) {
@@ -211,6 +259,10 @@ export class Player {
   respawn(spawnPosition) {
     this.isDead = false;
     this.health = this.maxHealth;
+    this.hunger = this.maxHunger;
+    this._hungerDrainAccum = 0;
+    this._regenTimer = 0;
+    this._starveTimer = 0;
     this.velocity.set(0, 0, 0);
     this._fallStartY = null;
     if (spawnPosition) this.position.copy(spawnPosition);

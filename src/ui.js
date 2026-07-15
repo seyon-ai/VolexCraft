@@ -4,7 +4,7 @@
 
 import { WorldSettings } from './settings.js';
 import { ItemRegistry, isItem, ITEM_ICON_PATH } from './items.js';
-import { iconTileFor } from './block.js';
+import { iconTileFor, tintForAny } from './block.js';
 import { tileImageUrl } from './textureAtlas.js';
 
 export class UI {
@@ -21,6 +21,8 @@ export class UI {
       toast: document.getElementById('toast'),
       hearts: document.getElementById('hearts'),
       healthContainer: document.getElementById('health-container'),
+      hungerIcons: document.getElementById('hunger-icons'),
+      hungerContainer: document.getElementById('hunger-container'),
       crosshair: document.getElementById('crosshair'),
       breakRing: document.getElementById('break-ring'),
       debugPanel: document.getElementById('debug-panel'),
@@ -122,6 +124,20 @@ export class UI {
       const half = !filled && health > i * 2;
       heart.className = `heart ${filled ? 'full' : half ? 'half' : 'empty'}`;
       this.dom.hearts.appendChild(heart);
+    }
+  }
+
+  updateHunger(hunger, maxHunger, visible) {
+    this.dom.hungerContainer.style.display = visible ? 'flex' : 'none';
+    if (!visible) return;
+    const totalIcons = maxHunger / 2;
+    this.dom.hungerIcons.innerHTML = '';
+    for (let i = 0; i < totalIcons; i++) {
+      const icon = document.createElement('div');
+      const filled = hunger >= (i + 1) * 2;
+      const half = !filled && hunger > i * 2;
+      icon.className = `hunger-icon ${filled ? 'full' : half ? 'half' : 'empty'}`;
+      this.dom.hungerIcons.appendChild(icon);
     }
   }
 
@@ -310,19 +326,7 @@ export class UI {
 }
 
 function swatchColorFor(id) {
-  if (isItem(id)) {
-    const display = ItemRegistry[id]?.display;
-    return display ? display.color : '#999';
-  }
-  const colors = {
-    1: '#5a9e3c', 2: '#78543c', 3: '#828286', 4: '#e0cb8e', 5: '#3e78c4',
-    6: '#67482a', 7: '#3a7830', 9: '#e8eef8', 10: '#7a7a7e', 11: '#b08850',
-    12: '#c8e1e8', 13: '#7e7a76', 14: '#a0a4ae', 15: '#28282a', 16: '#d8b28c',
-    17: '#f4d040', 18: '#66e0e0', 19: '#d22020', 20: '#30c46e', 21: '#b08850',
-    22: '#78787c', 23: '#964838', 24: '#d8c696', 25: '#5a785a', 26: '#b0d6eb',
-    27: '#c47820', 28: '#3a8442', 29: '#58a03c', 32: '#d8d6d0', 33: '#f8d448', 34: '#78e8e8',
-  };
-  return colors[id] || '#999';
+  return tintForAny(id);
 }
 
 /** Real image URL for a slot's contents, or null to fall back to a flat color. */

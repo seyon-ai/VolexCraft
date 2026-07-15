@@ -22,6 +22,7 @@ export const SaveSystem = {
           yaw: game.controls.yaw,
           pitch: game.controls.pitch,
           health: game.player.health,
+          hunger: game.player.hunger,
         },
         inventory: game.inventory.serialize(),
         gameMode: game.gameMode.mode,

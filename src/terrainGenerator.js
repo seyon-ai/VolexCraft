@@ -35,12 +35,23 @@ export class TerrainGenerator {
   constructor(seed) {
     this.seed = seed >>> 0;
     // Separate noise instances (different seed offsets) so height, temperature,
-    // moisture, and tree placement don't visibly correlate with one another.
+    // moisture, tree placement, caves, and each ore type don't visibly
+    // correlate with one another.
     this.heightNoise = new SimplexNoise(this.seed);
     this.detailNoise = new SimplexNoise(this.seed ^ 0x9e3779b9);
     this.temperatureNoise = new SimplexNoise((this.seed + 101) >>> 0);
     this.moistureNoise = new SimplexNoise((this.seed + 202) >>> 0);
     this.treeNoise = new SimplexNoise((this.seed + 303) >>> 0);
+    this.caveNoise = new SimplexNoise((this.seed + 404) >>> 0);
+    this.caveWormNoise = new SimplexNoise((this.seed + 405) >>> 0);
+    this.oreNoises = {
+      coal: new SimplexNoise((this.seed + 601) >>> 0),
+      iron: new SimplexNoise((this.seed + 602) >>> 0),
+      gold: new SimplexNoise((this.seed + 603) >>> 0),
+      diamond: new SimplexNoise((this.seed + 604) >>> 0),
+      redstone: new SimplexNoise((this.seed + 605) >>> 0),
+      emerald: new SimplexNoise((this.seed + 606) >>> 0),
+    };
   }
 
   getTemperature(x, z) {
@@ -111,34 +122,51 @@ export class TerrainGenerator {
     return BlockId.DIRT;
   }
 
-  /** Deterministic 0..1 roll for a specific voxel coordinate (ore placement, decoration). */
+  /** Deterministic 0..1 roll for a specific voxel coordinate (decoration, non-clustered placement). */
   voxelRoll(x, y, z, salt = 0) {
     return hash4(this.seed ^ salt, x, y, z);
   }
 
-  /** Returns an ore BlockId to substitute for stone at this coordinate, or null. Depth-banded rarity. */
+  /** A single ore's presence test: noise above a threshold forms a connected blob/vein
+   * (nearby coordinates share similar noise values), not an isolated single block. */
+  _oreVein(noise, x, y, z, freq, threshold) {
+    return noise.noise3D(x * freq, y * freq, z * freq) > threshold;
+  }
+
+  /** Returns an ore BlockId to substitute for stone at this coordinate, or null. Depth-banded rarity.
+   * Thresholds are calibrated against the actual noise3D distribution (see dev notes) to land
+   * roughly around: coal ~3%, iron ~1%, gold/redstone ~0.3-0.5%, emerald/diamond ~0.05-0.15% of stone. */
   pickOre(x, y, z) {
-    const r = this.voxelRoll(x, y, z, 11);
+    const n = this.oreNoises;
     if (y < 16) {
-      if (r < 0.004) return BlockId.DIAMOND_ORE;
-      if (r < 0.010) return BlockId.GOLD_ORE;
-      if (r < 0.018) return BlockId.REDSTONE_ORE;
-      if (r < 0.024) return BlockId.EMERALD_ORE;
-      if (r < 0.07) return BlockId.IRON_ORE;
-      if (r < 0.12) return BlockId.COAL_ORE;
-      return null;
+      if (this._oreVein(n.diamond, x, y, z, 0.05, 0.95)) return BlockId.DIAMOND_ORE;
+      if (this._oreVein(n.emerald, x, y, z, 0.055, 0.94)) return BlockId.EMERALD_ORE;
+      if (this._oreVein(n.redstone, x, y, z, 0.06, 0.91)) return BlockId.REDSTONE_ORE;
+      if (this._oreVein(n.gold, x, y, z, 0.06, 0.92)) return BlockId.GOLD_ORE;
+    } else if (y < 40) {
+      if (this._oreVein(n.gold, x, y, z, 0.06, 0.93)) return BlockId.GOLD_ORE;
+      if (this._oreVein(n.redstone, x, y, z, 0.06, 0.93)) return BlockId.REDSTONE_ORE;
+      if (this._oreVein(n.emerald, x, y, z, 0.055, 0.96)) return BlockId.EMERALD_ORE;
     }
-    if (y < 40) {
-      if (r < 0.006) return BlockId.GOLD_ORE;
-      if (r < 0.012) return BlockId.REDSTONE_ORE;
-      if (r < 0.016) return BlockId.EMERALD_ORE;
-      if (r < 0.055) return BlockId.IRON_ORE;
-      if (r < 0.10) return BlockId.COAL_ORE;
-      return null;
-    }
-    if (r < 0.02) return BlockId.IRON_ORE;
-    if (r < 0.06) return BlockId.COAL_ORE;
+    if (this._oreVein(n.iron, x, y, z, 0.07, 0.87)) return BlockId.IRON_ORE;
+    if (this._oreVein(n.coal, x, y, z, 0.08, 0.78)) return BlockId.COAL_ORE;
     return null;
+  }
+
+  /**
+   * True if this stone-region coordinate should be carved into open air.
+   * Two noise fields combined (a common "cave generation" trick): a blobby
+   * cavern field (large hollow pockets) plus a ridged "worm" field whose
+   * near-zero band forms thin winding connecting tunnels — together they
+   * read as a natural, explorable cave system rather than scattered pockets.
+   * Single-octave noise (not fbm) since this runs for every stone-region voxel.
+   */
+  isCave(x, y, z) {
+    if (y < 3 || y > WorldSettings.SEA_LEVEL + 12) return false; // solid floor + skip near/above surface
+    const cavern = this.caveNoise.noise3D(x * 0.045, y * 0.08, z * 0.045);
+    if (cavern > 0.55) return true;
+    const worm = Math.abs(this.caveWormNoise.noise3D(x * 0.07, y * 0.1, z * 0.07));
+    return worm < 0.05;
   }
 
   /** Surface decoration (tall grass, cactus, pumpkin) for a column that isn't a tree. */

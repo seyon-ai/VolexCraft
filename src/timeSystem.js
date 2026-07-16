@@ -59,6 +59,8 @@ export class TimeSystem {
     this.time = TimeSettings.startTime;
     this.timeScale = TimeSettings.timeScale;
     this.paused = false;
+    this.sunDirection = new THREE.Vector3(0, 1, 0);
+    this.sunIntensityForWater = 0;
 
     this.sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
     this.sunLight.castShadow = GraphicsSettings.shadows;
@@ -108,6 +110,8 @@ export class TimeSystem {
     const sx = Math.cos(angle) * radius;
     const sy = sunHeight * radius;
     const sz = radius * 0.25;
+    this.sunDirection.set(sx, sy, sz).normalize();
+    this.sunIntensityForWater = clamp((sunHeight + 0.1) / 0.4, 0, 1);
 
     if (followTarget) {
       this.sunLight.position.set(followTarget.x + sx, followTarget.y + Math.max(sy, 5), followTarget.z + sz);
@@ -144,6 +148,16 @@ export class TimeSystem {
 
   setTimeScale(scale) { this.timeScale = scale; }
   setTime(fraction) { this.time = ((fraction % 1) + 1) % 1; }
+
+  /** Changes shadow map resolution at runtime (used by graphics presets). */
+  setShadowMapSize(size) {
+    if (this.sunLight.shadow.mapSize.width === size) return;
+    this.sunLight.shadow.mapSize.set(size, size);
+    if (this.sunLight.shadow.map) {
+      this.sunLight.shadow.map.dispose();
+      this.sunLight.shadow.map = null; // three.js regenerates it next render
+    }
+  }
 
   getPhaseLabel() {
     const t = this.time;

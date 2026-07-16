@@ -10,7 +10,8 @@
 <script type="importmap">
 {
   "imports": {
-    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
   }
 }
 </script>
@@ -77,6 +78,16 @@
   <div class="menu-panel">
     <h2>Paused</h2>
 
+    <div class="settings-row">
+      <label>Graphics quality</label>
+      <select id="graphics-preset-select">
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+        <option value="ultra">Ultra</option>
+        <option value="extreme" id="graphics-preset-extreme-option">Extreme (desktop)</option>
+      </select>
+    </div>
     <div class="settings-row">
       <label>Render distance <span id="render-distance-value">5</span></label>
       <input id="render-distance" type="range" min="2" max="10" step="1" value="5" />

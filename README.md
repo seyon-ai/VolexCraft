@@ -2,6 +2,33 @@
 
 A browser-based voxel game (Three.js, ES modules, no build step, no backend).
 
+## What's new in V6 (Voltx Craft visual pipeline, part 1)
+
+**Real post-processing pipeline** (`src/postprocessing.js`) — built on Three.js's own `examples/jsm` addons (EffectComposer/RenderPass/UnrealBloomPass/SSAOPass/ShaderPass/OutputPass), not hand-rolled fakes:
+- Bloom (UnrealBloomPass)
+- SSAO (SSAOPass) — enabled at High preset and up, always off on mobile regardless of preset (too costly for mobile GPUs)
+- Filmic tone mapping (`ACESFilmicToneMapping`) + correct color space, via OutputPass
+- A lightweight color-grade pass (contrast/saturation/vignette — the brief's "cinematic color grading" and "optional vignette")
+- Addon modules load via dynamic `import()` inside a try/catch, specifically so that if the CDN ever fails to serve one of those files, only post-processing degrades (falls back to direct rendering) — it can't take the whole game down with it. Verified this fallback path directly.
+
+**Real water shader** (`src/waterMaterial.js`) — one shared `ShaderMaterial` used by every chunk's water mesh (not one instance per chunk):
+- Animated vertex-displaced waves (two overlapping sine waves)
+- Fresnel-weighted blend toward the current sky color (a believable fake reflection, not a real one — see below)
+- Scrolling UV distortion for shimmer
+- A sun-glint highlight that tracks the actual sun direction and fades appropriately at night
+- Automatically falls back to a simple flat material at the Low preset
+
+**Graphics presets** — Low/Medium/High/Ultra/Extreme, selectable from the pause menu, each wiring real settings: render distance, shadow map resolution (changed live, no restart needed), bloom/SSAO/color-grade toggles, water shader vs. simple, fog, and pixel ratio cap. Extreme is hidden entirely on mobile, per the brief.
+
+**Adaptive quality** — a rolling FPS average that automatically drops one preset tier if sustained below ~28fps, with a cooldown so it doesn't flip-flop. Only ever downgrades automatically; you can always manually pick a higher preset again. This is the practical stand-in for "dynamic resolution scaling" — see the honesty note below on why true DRS wasn't implemented.
+
+**Honest scope note for this pass** — what's real vs. what's a deliberate simplification:
+- *Real:* bloom, SSAO, tone mapping, color grading, the water shader, graphics presets, adaptive quality.
+- *Faked reasonably:* water "reflections" are a fresnel color-tint, not a real reflection of the scene (a true one needs a second render pass per water surface — not worth the cost given how much water can be on screen at once in a voxel world).
+- *Not implemented, and here's why:* cascaded shadow maps (Three.js doesn't have a drop-in for this; a hand-rolled multi-frustum version is a substantial project on its own and the existing single shadow camera, now with live-adjustable resolution, covers the practical need); true volumetric god rays and clouds (real-time raymarching at a frame budget that also has to run a voxel world and stay smooth on mobile isn't realistic — a later pass can add a cheap screen-space light-shaft fake if wanted); TAA (Three.js's TAA addon is a full accumulation-buffer system that fights with a chunk-streaming voxel world's constantly-changing geometry; a simple sharpen pass could be added instead if motion aliasing bothers you); real-time water caustics (skipped rather than faked badly); PBR normal/roughness/AO maps (would require you to also supply and maintain normal/roughness/AO images per block texture — a real workload increase for a benefit this simple voxel lighting model can't fully show); Web Workers, instanced rendering, and occlusion culling (Three.js already frustum-culls automatically per-mesh, and the chunk streaming + generation throttling from V5 is doing the heavy lifting for "smooth chunk loading" — a Web Worker–based terrain generator is a legitimate future project, not a quick add).
+
+**Still to come:** weather (rain/snow/thunder), drifting cloud billboards, and sky flourishes (shooting stars, faint aurora tint) — continuing next.
+
 ## What's new in V5
 
 **The "freeze after playing a while" bug — found and fixed**

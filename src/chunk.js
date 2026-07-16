@@ -254,7 +254,7 @@ export class Chunk {
 
     let material;
     if (kind === 'water') {
-      material = new THREE.MeshLambertMaterial({ map: atlasTexture, transparent: true, opacity: 0.75, depthWrite: false });
+      material = this.world.useShaderWater ? this.world.waterMaterial : this.world.simpleWaterMaterial;
     } else if (kind === 'cutout') {
       material = new THREE.MeshLambertMaterial({ map: atlasTexture, transparent: true, alphaTest: 0.4, side: THREE.DoubleSide });
     } else {
@@ -275,6 +275,7 @@ export class Chunk {
       if (this[field]) {
         this.world.scene.remove(this[field]);
         this[field].geometry.dispose();
+        if (field !== 'waterMesh') this[field].material.dispose(); // water material is shared across all chunks — never dispose it here
         this[field] = null;
       }
     }

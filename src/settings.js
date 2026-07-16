@@ -58,3 +58,38 @@ export function isMobileDevice() {
   const touch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
   return touch && /Mobi|Android|iPhone|iPad|iPod/i.test(ua) || (touch && window.innerWidth < 900);
 }
+
+/**
+ * Graphics presets. "extreme" is desktop-only by convention (gated in UI/main.js,
+ * not enforced here) since it pushes render distance and shadow resolution hard.
+ * Each preset is applied wholesale by main.js's _applyGraphicsPreset().
+ */
+export const GraphicsPreset = { LOW: 'low', MEDIUM: 'medium', HIGH: 'high', ULTRA: 'ultra', EXTREME: 'extreme' };
+
+export const GRAPHICS_PRESETS = {
+  [GraphicsPreset.LOW]: {
+    renderDistance: 3, shadows: false, shadowMapSize: 512, fog: true,
+    bloom: false, ssao: false, colorGrade: false, waterShader: false,
+    weather: false, clouds: 0, starCount: 300, pixelRatioCap: 1.0,
+  },
+  [GraphicsPreset.MEDIUM]: {
+    renderDistance: 4, shadows: true, shadowMapSize: 1024, fog: true,
+    bloom: true, ssao: false, colorGrade: true, waterShader: true,
+    weather: true, clouds: 10, starCount: 600, pixelRatioCap: 1.25,
+  },
+  [GraphicsPreset.HIGH]: {
+    renderDistance: 5, shadows: true, shadowMapSize: 2048, fog: true,
+    bloom: true, ssao: true, colorGrade: true, waterShader: true,
+    weather: true, clouds: 18, starCount: 900, pixelRatioCap: 1.5,
+  },
+  [GraphicsPreset.ULTRA]: {
+    renderDistance: 6, shadows: true, shadowMapSize: 2048, fog: true,
+    bloom: true, ssao: true, colorGrade: true, waterShader: true,
+    weather: true, clouds: 26, starCount: 1200, pixelRatioCap: 1.75,
+  },
+  [GraphicsPreset.EXTREME]: {
+    renderDistance: 8, shadows: true, shadowMapSize: 4096, fog: true,
+    bloom: true, ssao: true, colorGrade: true, waterShader: true,
+    weather: true, clouds: 36, starCount: 1600, pixelRatioCap: 2.0,
+  },
+};

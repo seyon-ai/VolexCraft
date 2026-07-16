@@ -9,6 +9,7 @@ import { WorldSettings } from './settings.js';
 import { BlockId, isSolid } from './block.js';
 import { floorDiv, mod, keyForChunk } from './utils.js';
 import { buildTextureAtlas } from './textureAtlas.js';
+import { createWaterMaterial, createSimpleWaterMaterial } from './waterMaterial.js';
 
 const { CHUNK_SIZE, CHUNK_HEIGHT } = WorldSettings;
 
@@ -20,10 +21,25 @@ export class World {
     this.chunks = new Map(); // "cx,cz" -> Chunk
     this.modifications = new Map(); // "x,y,z" -> blockId, world-space player edits only
     this.atlasTexture = buildTextureAtlas();
+    // Shared across every chunk's water mesh — one uniform update per frame
+    // (time, sun direction) instead of one per chunk.
+    this.waterMaterial = createWaterMaterial(this.atlasTexture);
+    this.simpleWaterMaterial = createSimpleWaterMaterial(this.atlasTexture);
+    this.useShaderWater = true;
     this.buildQueue = [];
     this.loadQueue = [];
     this.renderDistance = WorldSettings.RENDER_DISTANCE;
     this.lastPlayerChunk = { cx: null, cz: null };
+  }
+
+  /** Swaps every loaded chunk's water mesh between the shader and simple materials (graphics preset toggle). */
+  setWaterQuality(useShader) {
+    if (this.useShaderWater === useShader) return;
+    this.useShaderWater = useShader;
+    const material = useShader ? this.waterMaterial : this.simpleWaterMaterial;
+    for (const chunk of this.chunks.values()) {
+      if (chunk.waterMesh) chunk.waterMesh.material = material;
+    }
   }
 
   worldToChunkCoords(wx, wz) {

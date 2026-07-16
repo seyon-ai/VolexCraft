@@ -18,8 +18,9 @@ import { pickaxeTier, weaponDamage, isFood, foodHealAmount } from './items.js';
 import { MobManager } from './mobs.js';
 import { DroppedItemManager } from './droppedItems.js';
 import { CRAFTING_RECIPES, SMELTING_RECIPES, craftOnce, smeltOnce } from './crafting.js';
-import { GraphicsSettings, WorldSettings, isMobileDevice } from './settings.js';
+import { GraphicsSettings, WorldSettings, isMobileDevice, GraphicsPreset, GRAPHICS_PRESETS } from './settings.js';
 import { hashStringSeed } from './utils.js';
+import { PostProcessing } from './postprocessing.js';
 
 const BREAK_TIME_SURVIVAL = 0.35; // seconds to break a block by hand in Survival
 const CREATIVE_BREAK_INTERVAL = 0.15; // seconds between breaks while held in Creative (rate cap, not instant-infinite)
@@ -37,6 +38,9 @@ class Game {
     this._initRenderer();
     this._initBlockOutline();
     this._raycaster = new THREE.Raycaster();
+    this.postFX = new PostProcessing(this.renderer, this.scene, this.camera);
+    this._fpsHistory = [];
+    this._adaptiveQualityCooldown = 0;
 
     if (this.mobile) {
       this.controls = new MobileControls(this, this.ui.getMobileElements());
@@ -46,6 +50,7 @@ class Game {
     this.ui.showMobileControls(false);
 
     this.graphicsOptions = { shadows: GraphicsSettings.shadows, fog: GraphicsSettings.fogEnabled };
+    this._applyGraphicsPreset(this.mobile ? GraphicsPreset.MEDIUM : GraphicsPreset.HIGH);
 
     this._breakProgress = 0;
     this._breakTargetKey = null;
@@ -71,7 +76,9 @@ class Game {
       onShadowsChange: (v) => this._setShadows(v),
       onFogChange: (v) => this._setFog(v),
       onSensitivityChange: (v) => this._setSensitivity(v),
+      onGraphicsPresetChange: (key) => this._applyGraphicsPreset(key),
     });
+    if (this.mobile) this.ui.hideExtremePresetOption();
 
     this.ui.bindHotbarSelection((index) => {
       if (this.inventory) this.inventory.select(index);
@@ -96,6 +103,9 @@ class Game {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = GraphicsSettings.shadows;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     document.getElementById('canvas-container').appendChild(this.renderer.domElement);
 
     this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 400);
@@ -115,6 +125,7 @@ class Game {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.postFX.setSize(window.innerWidth, window.innerHeight);
   }
 
   // ---------------- world lifecycle ----------------
@@ -183,6 +194,7 @@ class Game {
       fog: this.graphicsOptions.fog,
     });
     this.ui.updateModeLabel(this.gameMode.mode);
+    this._applyGraphicsPreset(this.graphicsPreset);
   }
 
   _teardownWorld() {
@@ -262,6 +274,31 @@ class Game {
 
   _setSensitivity(multiplier) {
     this._sensitivityMultiplier = multiplier; // applied at input-poll time
+  }
+
+  /** Applies one of settings.js's GRAPHICS_PRESETS wholesale — the single place
+   * a preset touches the renderer, post-processing, shadows, fog, water quality,
+   * render distance, and (once built) weather/clouds. */
+  _applyGraphicsPreset(key) {
+    const preset = GRAPHICS_PRESETS[key];
+    if (!preset) return;
+    this.graphicsPreset = key;
+
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, preset.pixelRatioCap));
+    this.postFX.applyPreset(preset, this.mobile);
+
+    this._setShadows(preset.shadows);
+    if (this.timeSystem) this.timeSystem.setShadowMapSize(preset.shadowMapSize);
+    this._setFog(preset.fog);
+
+    if (this.world) this.world.setRenderDistance(preset.renderDistance);
+    if (this.world) this.world.setWaterQuality(preset.waterShader);
+
+    if (this.weatherSystem) this.weatherSystem.setEnabled(preset.weather);
+    if (this.cloudSystem) this.cloudSystem.setCount(preset.clouds);
+    if (this.timeSystem) this.timeSystem.setStarCount?.(preset.starCount);
+
+    if (this.ui.setGraphicsPresetValue) this.ui.setGraphicsPresetValue(key);
   }
 
   _setMobileControlsVisible(visible) {
@@ -350,6 +387,14 @@ class Game {
     this._setMobileControlsVisible(true);
   }
 
+  _updateWaterUniforms() {
+    const mat = this.world.waterMaterial;
+    mat.uniforms.time.value = this.clock.elapsedTime;
+    mat.uniforms.sunDirection.value.copy(this.timeSystem.sunDirection);
+    mat.uniforms.sunIntensity.value = this.timeSystem.sunIntensityForWater;
+    if (this.scene.background) mat.uniforms.skyColor.value.copy(this.scene.background);
+  }
+
   // ---------------- per-frame update ----------------
 
   _animate() {
@@ -361,9 +406,10 @@ class Game {
     if (this.running && !this.paused && !this._openPanel) {
       this._update(dt);
       this._maybeAutosave();
+      this._updateAdaptiveQuality(dt);
     }
 
-    this.renderer.render(this.scene, this.camera);
+    this.postFX.render();
   }
 
   _trackFps(dt) {
@@ -371,6 +417,28 @@ class Game {
     if (this._fpsAccum >= 0.5) {
       this._fps = Math.round(this._fpsFrames / this._fpsAccum);
       this._fpsAccum = 0; this._fpsFrames = 0;
+      this._fpsHistory.push(this._fps);
+      if (this._fpsHistory.length > 10) this._fpsHistory.shift(); // ~5s rolling window
+    }
+  }
+
+  /** Stands in for the brief's "dynamic resolution scaling" / "adaptive quality
+   * system": if FPS stays low for a sustained stretch, drop one preset tier.
+   * Only ever downgrades automatically — never auto-upgrades, to avoid
+   * flip-flopping; the player can always manually pick a higher preset again. */
+  _updateAdaptiveQuality(dt) {
+    this._adaptiveQualityCooldown -= dt;
+    if (this._adaptiveQualityCooldown > 0) return;
+    if (this._fpsHistory.length < 10) return;
+
+    const avgFps = this._fpsHistory.reduce((a, b) => a + b, 0) / this._fpsHistory.length;
+    const order = [GraphicsPreset.EXTREME, GraphicsPreset.ULTRA, GraphicsPreset.HIGH, GraphicsPreset.MEDIUM, GraphicsPreset.LOW];
+    const currentIndex = order.indexOf(this.graphicsPreset);
+    if (avgFps < 28 && currentIndex < order.length - 1) {
+      this._applyGraphicsPreset(order[currentIndex + 1]);
+      this._adaptiveQualityCooldown = 12; // give the new preset a while before considering another drop
+      this._fpsHistory = [];
+      this.ui.showToast?.('Graphics quality lowered for smoother performance');
     }
   }
 
@@ -410,6 +478,7 @@ class Game {
 
     this.world.update(this.player.position.x, this.player.position.z);
     this.timeSystem.update(dt, this.player.position);
+    this._updateWaterUniforms();
     this.player.gameModeCanTakeDamage = this.gameMode.canTakeDamage();
     this.mobManager.update(dt, this.player, this.timeSystem.isNight(), (mob) => {
       if (this.gameMode.isSurvival() && mob.def.drop) {

@@ -34,6 +34,8 @@ export class UI {
       pauseOverlay: document.getElementById('pause-overlay'),
       resumeBtn: document.getElementById('btn-resume'),
       saveQuitBtn: document.getElementById('btn-save-quit'),
+      graphicsPresetSelect: document.getElementById('graphics-preset-select'),
+      graphicsPresetExtremeOption: document.getElementById('graphics-preset-extreme-option'),
       renderDistanceSlider: document.getElementById('render-distance'),
       renderDistanceValue: document.getElementById('render-distance-value'),
       shadowsToggle: document.getElementById('shadows-toggle'),
@@ -294,7 +296,7 @@ export class UI {
     this.dom.pauseBtn.addEventListener('click', onPause);
   }
 
-  bindSettings({ onRenderDistanceChange, onShadowsChange, onFogChange, onSensitivityChange }) {
+  bindSettings({ onRenderDistanceChange, onShadowsChange, onFogChange, onSensitivityChange, onGraphicsPresetChange }) {
     this.dom.renderDistanceSlider.min = WorldSettings.MIN_RENDER_DISTANCE;
     this.dom.renderDistanceSlider.max = WorldSettings.MAX_RENDER_DISTANCE;
     this.dom.renderDistanceSlider.addEventListener('input', (e) => {
@@ -305,6 +307,7 @@ export class UI {
     this.dom.shadowsToggle.addEventListener('change', (e) => onShadowsChange(e.target.checked));
     this.dom.fogToggle.addEventListener('change', (e) => onFogChange(e.target.checked));
     this.dom.sensitivitySlider.addEventListener('input', (e) => onSensitivityChange(parseFloat(e.target.value)));
+    this.dom.graphicsPresetSelect.addEventListener('change', (e) => onGraphicsPresetChange(e.target.value));
   }
 
   setSettingsValues({ renderDistance, shadows, fog }) {
@@ -312,6 +315,14 @@ export class UI {
     this.dom.renderDistanceValue.textContent = renderDistance;
     this.dom.shadowsToggle.checked = shadows;
     this.dom.fogToggle.checked = fog;
+  }
+
+  setGraphicsPresetValue(key) {
+    this.dom.graphicsPresetSelect.value = key;
+  }
+
+  hideExtremePresetOption() {
+    this.dom.graphicsPresetExtremeOption.remove();
   }
 
   getMobileElements() {

@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { PlayerSettings } from './settings.js';
 import { clamp } from './utils.js';
+import { BlockId } from './block.js';
 
 export class Player {
   constructor(world) {
@@ -133,11 +134,15 @@ export class Player {
     const settings = PlayerSettings;
     this.flying = gameMode === 'creative' && this.flying;
 
+    const eye = this.getEyePosition();
+    this.isUnderwater = this.world.getBlock(Math.floor(eye.x), Math.floor(eye.y), Math.floor(eye.z)) === BlockId.WATER;
+
     const canSprint = gameMode !== 'survival' || this.hunger > 0;
     const sprinting = this.sprinting && canSprint;
-    const speed = this.flying
+    const waterDrag = this.isUnderwater && !this.flying ? 0.5 : 1;
+    const speed = (this.flying
       ? (sprinting ? settings.flySprintSpeed : settings.flySpeed)
-      : (sprinting ? settings.sprintSpeed : settings.walkSpeed);
+      : (sprinting ? settings.sprintSpeed : settings.walkSpeed)) * waterDrag;
 
     // Horizontal velocity is directly driven by input (arcade-style, not accel-based)
     // for crisp, responsive controls that feel right for a voxel game.
@@ -146,6 +151,10 @@ export class Player {
 
     if (this.flying) {
       this.velocity.y = wishDirection.y * speed;
+    } else if (this.isUnderwater) {
+      if (jumpPressed) this.velocity.y = Math.min(this.velocity.y + 4, 3.5);
+      this.velocity.y += settings.gravity * 0.35 * dt;
+      this.velocity.y = clamp(this.velocity.y, -3, 3.5);
     } else {
       if (jumpPressed && this.onGround) {
         this.velocity.y = settings.jumpVelocity;

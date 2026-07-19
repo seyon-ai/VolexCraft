@@ -61,6 +61,7 @@ export class DesktopControls {
         else this.game._openInventoryScreen();
       }
       if (e.code === 'KeyM') this.game.onToggleGameModeRequested();
+      if (e.code === 'KeyQ') this.game._dropSelectedItem();
       if (e.code === 'Escape') {
         if (this.game._openPanel) this.game._closePanel();
         else document.exitPointerLock();

@@ -22,13 +22,32 @@
 
 <!-- ===================== MAIN MENU ===================== -->
 <div id="main-menu" class="overlay">
-  <div class="menu-panel">
+  <div class="menu-panel wide">
     <h1 class="game-title">VOXEL<span>CRAFT</span></h1>
     <p class="menu-subtitle">an infinite blocky world, in your browser</p>
 
+    <div id="world-list"></div>
+    <p id="world-list-empty" class="menu-subtitle" style="display:none;">No worlds yet — create one below.</p>
+
+    <button id="btn-show-create-world" class="menu-button primary">+ Create New World</button>
+
+    <p class="menu-hint">WASD move · Mouse look · Space jump (auto-step ledges) · Shift sprint · Left-click break/attack · Right-click place (or eat food / open crafting table &amp; furnace) · E inventory · Q drop item · M toggle mode · Double-tap Space to fly (Creative) · F3 debug · Mobile: joystick to move, tap anywhere to place/eat, hold to break/attack where you're touching</p>
+  </div>
+</div>
+
+<!-- ===================== CREATE WORLD ===================== -->
+<div id="create-world-overlay" class="overlay" style="display:none;">
+  <div class="menu-panel">
+    <h2>Create New World</h2>
+
+    <div class="menu-field">
+      <label for="world-name-input">World name</label>
+      <input id="world-name-input" type="text" placeholder="My World" autocomplete="off" maxlength="32" />
+    </div>
+
     <div class="menu-field">
       <label for="seed-input">World seed</label>
-      <input id="seed-input" type="text" placeholder="leave blank for random" autocomplete="off" />
+      <input id="seed-input" type="text" placeholder="leave blank for a random seed" autocomplete="off" />
     </div>
 
     <div class="menu-field">
@@ -39,10 +58,8 @@
       </select>
     </div>
 
-    <button id="btn-new-world" class="menu-button primary">New World</button>
-    <button id="btn-continue" class="menu-button">Continue Saved World</button>
-
-    <p class="menu-hint">WASD move · Mouse look · Space jump (auto-step ledges) · Shift sprint · Left-click break/attack · Right-click place (or eat food / open crafting table &amp; furnace) · E inventory · M toggle mode · Double-tap Space to fly (Creative) · F3 debug · Mobile: joystick to move, tap anywhere to place/eat, hold to break/attack where you're touching</p>
+    <button id="btn-create-world-confirm" class="menu-button primary">Create World</button>
+    <button id="btn-cancel-create-world" class="menu-button">Cancel</button>
   </div>
 </div>
 
@@ -71,6 +88,7 @@
 
   <div id="hotbar"></div>
   <div id="toast"></div>
+  <div id="underwater-overlay"></div>
 </div>
 
 <!-- ===================== PAUSE / SETTINGS ===================== -->
@@ -99,6 +117,9 @@
       <label><input id="fog-toggle" type="checkbox" checked /> Distance fog</label>
     </div>
     <div class="settings-row">
+      <label><input id="force-toggle" type="checkbox" /> Force graphics quality (disable auto-adjust)</label>
+    </div>
+    <div class="settings-row">
       <label>Mouse sensitivity</label>
       <input id="sensitivity-slider" type="range" min="0.2" max="2" step="0.1" value="1" />
     </div>
@@ -122,6 +143,7 @@
     <h2>Inventory</h2>
     <div id="inventory-backpack-grid" class="inv-grid"></div>
     <div id="inventory-hotbar-row" class="inv-grid inv-hotbar-row"></div>
+    <button id="btn-drop-selected" class="menu-button">Drop Selected Item (Q)</button>
     <h3 class="inv-section-title">Crafting</h3>
     <div id="inventory-crafting-list" class="recipe-list"></div>
     <button id="btn-close-inventory" class="menu-button">Close</button>

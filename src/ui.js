@@ -11,14 +11,20 @@ export class UI {
   constructor() {
     this.dom = {
       mainMenu: document.getElementById('main-menu'),
-      continueBtn: document.getElementById('btn-continue'),
-      newWorldBtn: document.getElementById('btn-new-world'),
+      worldList: document.getElementById('world-list'),
+      worldListEmpty: document.getElementById('world-list-empty'),
+      showCreateWorldBtn: document.getElementById('btn-show-create-world'),
+      createWorldOverlay: document.getElementById('create-world-overlay'),
+      worldNameInput: document.getElementById('world-name-input'),
       seedInput: document.getElementById('seed-input'),
       modeSelect: document.getElementById('mode-select'),
+      createWorldConfirmBtn: document.getElementById('btn-create-world-confirm'),
+      cancelCreateWorldBtn: document.getElementById('btn-cancel-create-world'),
 
       hud: document.getElementById('hud'),
       hotbar: document.getElementById('hotbar'),
       toast: document.getElementById('toast'),
+      underwaterOverlay: document.getElementById('underwater-overlay'),
       hearts: document.getElementById('hearts'),
       healthContainer: document.getElementById('health-container'),
       hungerIcons: document.getElementById('hunger-icons'),
@@ -40,6 +46,7 @@ export class UI {
       renderDistanceValue: document.getElementById('render-distance-value'),
       shadowsToggle: document.getElementById('shadows-toggle'),
       fogToggle: document.getElementById('fog-toggle'),
+      forceToggle: document.getElementById('force-toggle'),
       sensitivitySlider: document.getElementById('sensitivity-slider'),
 
       deathOverlay: document.getElementById('death-overlay'),
@@ -58,6 +65,7 @@ export class UI {
       inventoryHotbarRow: document.getElementById('inventory-hotbar-row'),
       inventoryCraftingList: document.getElementById('inventory-crafting-list'),
       closeInventoryBtn: document.getElementById('btn-close-inventory'),
+      dropSelectedBtn: document.getElementById('btn-drop-selected'),
 
       mobileControls: document.getElementById('mobile-controls'),
       joystickZone: document.getElementById('joystick-zone'),
@@ -151,6 +159,10 @@ export class UI {
     this.dom.timeLabel.textContent = phaseLabel;
   }
 
+  setUnderwaterOverlay(active) {
+    this.dom.underwaterOverlay.classList.toggle('active', active);
+  }
+
   showToast(message, durationMs = 1800) {
     clearTimeout(this._toastTimer);
     this.dom.toast.textContent = message;
@@ -172,31 +184,75 @@ export class UI {
     // explicitly by Game (desktop: unlock triggers pause, mobile: pause button).
   }
 
-  showMainMenu({ hasSave }) {
+  showMainMenu(worlds, onPlay, onDelete) {
     this.dom.mainMenu.style.display = 'flex';
-    this.dom.continueBtn.style.display = hasSave ? 'block' : 'none';
     this.dom.hud.style.display = 'none';
+    this.renderWorldList(worlds, onPlay, onDelete);
+  }
+
+  renderWorldList(worlds, onPlay, onDelete) {
+    this.dom.worldList.innerHTML = '';
+    this.dom.worldListEmpty.style.display = worlds.length === 0 ? 'block' : 'none';
+    for (const world of worlds) {
+      const card = document.createElement('div');
+      card.className = 'world-card';
+
+      const info = document.createElement('div');
+      const name = document.createElement('div');
+      name.className = 'world-card-name';
+      name.textContent = world.name;
+      const meta = document.createElement('div');
+      meta.className = 'world-card-meta';
+      const modeLabel = world.gameMode === 'creative' ? 'Creative' : 'Survival';
+      meta.textContent = `${modeLabel} · Seed ${world.seed} · Last played ${formatRelativeTime(world.lastPlayed)}`;
+      info.appendChild(name);
+      info.appendChild(meta);
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'world-card-delete';
+      deleteBtn.textContent = '✕';
+      deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); onDelete(world.id); });
+
+      card.appendChild(info);
+      card.appendChild(deleteBtn);
+      card.addEventListener('click', () => onPlay(world.id));
+      this.dom.worldList.appendChild(card);
+    }
+  }
+
+  showCreateWorldOverlay() {
+    this.dom.createWorldOverlay.style.display = 'flex';
+    this.dom.worldNameInput.value = '';
+    this.dom.seedInput.value = '';
+    this.dom.worldNameInput.focus();
+  }
+
+  hideCreateWorldOverlay() {
+    this.dom.createWorldOverlay.style.display = 'none';
+    document.activeElement?.blur();
   }
 
   hideMainMenu() {
     this.dom.mainMenu.style.display = 'none';
     this.dom.hud.style.display = 'block';
+    document.activeElement?.blur();
   }
 
   showPause() { this.dom.pauseOverlay.style.display = 'flex'; }
-  hidePause() { this.dom.pauseOverlay.style.display = 'none'; }
+  hidePause() { this.dom.pauseOverlay.style.display = 'none'; document.activeElement?.blur(); }
 
   showDeathScreen() { this.dom.deathOverlay.style.display = 'flex'; }
-  hideDeathScreen() { this.dom.deathOverlay.style.display = 'none'; }
+  hideDeathScreen() { this.dom.deathOverlay.style.display = 'none'; document.activeElement?.blur(); }
 
   bindCraftingClose(onClose) { this.dom.closeCraftingBtn.addEventListener('click', onClose); }
   bindFurnaceClose(onClose) { this.dom.closeFurnaceBtn.addEventListener('click', onClose); }
 
   bindInventoryOpen(onOpen) { this.dom.inventoryBtn.addEventListener('click', onOpen); }
   bindInventoryClose(onClose) { this.dom.closeInventoryBtn.addEventListener('click', onClose); }
+  bindDropSelected(onDrop) { this.dom.dropSelectedBtn.addEventListener('click', onDrop); }
 
   showInventoryPanel() { this.dom.inventoryOverlay.style.display = 'flex'; }
-  hideInventoryPanel() { this.dom.inventoryOverlay.style.display = 'none'; }
+  hideInventoryPanel() { this.dom.inventoryOverlay.style.display = 'none'; document.activeElement?.blur(); }
 
   /**
    * Renders the backpack grid + a hotbar preview row. Clicking any slot swaps
@@ -232,9 +288,9 @@ export class UI {
   }
 
   showCraftingPanel() { this.dom.craftingOverlay.style.display = 'flex'; }
-  hideCraftingPanel() { this.dom.craftingOverlay.style.display = 'none'; }
+  hideCraftingPanel() { this.dom.craftingOverlay.style.display = 'none'; document.activeElement?.blur(); }
   showFurnacePanel() { this.dom.furnaceOverlay.style.display = 'flex'; }
-  hideFurnacePanel() { this.dom.furnaceOverlay.style.display = 'none'; }
+  hideFurnacePanel() { this.dom.furnaceOverlay.style.display = 'none'; document.activeElement?.blur(); }
 
   /** Renders a recipe list (shared by crafting table and furnace panels). */
   renderRecipeList(listEl, recipes, inventory, actionLabel, onAction) {
@@ -284,19 +340,25 @@ export class UI {
 
   isTypingInInput() {
     const el = document.activeElement;
-    return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT');
+    if (!el) return false;
+    const isFormEl = el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT';
+    if (!isFormEl) return false;
+    return el.offsetParent !== null; // ignore focus left behind on a hidden (display:none) element
   }
 
-  bindMenuButtons({ onContinue, onNewWorld, onResume, onSaveQuit, onRespawn, onPause }) {
-    this.dom.continueBtn.addEventListener('click', onContinue);
-    this.dom.newWorldBtn.addEventListener('click', () => onNewWorld(this.dom.seedInput.value, this.dom.modeSelect.value));
+  bindMenuButtons({ onShowCreateWorld, onCreateWorldConfirm, onCancelCreateWorld, onResume, onSaveQuit, onRespawn, onPause }) {
+    this.dom.showCreateWorldBtn.addEventListener('click', onShowCreateWorld);
+    this.dom.createWorldConfirmBtn.addEventListener('click', () => {
+      onCreateWorldConfirm(this.dom.worldNameInput.value, this.dom.seedInput.value, this.dom.modeSelect.value);
+    });
+    this.dom.cancelCreateWorldBtn.addEventListener('click', onCancelCreateWorld);
     this.dom.resumeBtn.addEventListener('click', onResume);
     this.dom.saveQuitBtn.addEventListener('click', onSaveQuit);
     this.dom.respawnBtn.addEventListener('click', onRespawn);
     this.dom.pauseBtn.addEventListener('click', onPause);
   }
 
-  bindSettings({ onRenderDistanceChange, onShadowsChange, onFogChange, onSensitivityChange, onGraphicsPresetChange }) {
+  bindSettings({ onRenderDistanceChange, onShadowsChange, onFogChange, onSensitivityChange, onGraphicsPresetChange, onForceToggleChange }) {
     this.dom.renderDistanceSlider.min = WorldSettings.MIN_RENDER_DISTANCE;
     this.dom.renderDistanceSlider.max = WorldSettings.MAX_RENDER_DISTANCE;
     this.dom.renderDistanceSlider.addEventListener('input', (e) => {
@@ -308,6 +370,7 @@ export class UI {
     this.dom.fogToggle.addEventListener('change', (e) => onFogChange(e.target.checked));
     this.dom.sensitivitySlider.addEventListener('input', (e) => onSensitivityChange(parseFloat(e.target.value)));
     this.dom.graphicsPresetSelect.addEventListener('change', (e) => onGraphicsPresetChange(e.target.value));
+    this.dom.forceToggle.addEventListener('change', (e) => onForceToggleChange(e.target.checked));
   }
 
   setSettingsValues({ renderDistance, shadows, fog }) {
@@ -360,6 +423,17 @@ function applyIconStyle(el, id) {
 function clearIconStyle(el) {
   el.style.removeProperty('--swatch-color');
   el.style.removeProperty('--swatch-image');
+}
+
+function formatRelativeTime(timestamp) {
+  const seconds = Math.max(0, (Date.now() - timestamp) / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = seconds / 60;
+  if (minutes < 60) return `${Math.floor(minutes)}m ago`;
+  const hours = minutes / 60;
+  if (hours < 24) return `${Math.floor(hours)}h ago`;
+  const days = hours / 24;
+  return `${Math.floor(days)}d ago`;
 }
 
 function hasAll(inventory, needs) {

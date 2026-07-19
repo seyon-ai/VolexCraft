@@ -14,8 +14,8 @@ export const MobKind = {
 const MOB_DEFS = {
   [MobKind.COW]: { hostile: false, width: 0.9, height: 1.3, speed: 1.6, health: 10, bodyColor: 0x4a3626, headColor: 0xe8e0d0, drop: ItemId.RAW_BEEF },
   [MobKind.PIG]: { hostile: false, width: 0.85, height: 1.0, speed: 1.7, health: 8, bodyColor: 0xe6a9b0, headColor: 0xe6a9b0, drop: ItemId.RAW_PORKCHOP },
-  [MobKind.ZOMBIE]: { hostile: true, width: 0.6, height: 1.85, speed: 2.2, health: 20, bodyColor: 0x2f6b3a, headColor: 0x3d7a48, damage: 3, attackRange: 1.3, aggroRange: 14 },
-  [MobKind.SKELETON]: { hostile: true, width: 0.6, height: 1.85, speed: 2.0, health: 16, bodyColor: 0xd8d3c0, headColor: 0xe8e4d4, damage: 2, attackRange: 8, aggroRange: 16, ranged: true },
+  [MobKind.ZOMBIE]: { hostile: true, width: 0.6, height: 1.85, speed: 2.2, health: 20, bodyColor: 0x2f6b3a, headColor: 0x3d7a48, damage: 3, attackRange: 1.3, aggroRange: 14, undead: true },
+  [MobKind.SKELETON]: { hostile: true, width: 0.6, height: 1.85, speed: 2.0, health: 16, bodyColor: 0xd8d3c0, headColor: 0xe8e4d4, damage: 2, attackRange: 8, aggroRange: 16, ranged: true, undead: true },
   [MobKind.CREEPER]: { hostile: true, width: 0.6, height: 1.7, speed: 1.9, health: 18, bodyColor: 0x4caf50, headColor: 0x5cc45c, damage: 8, attackRange: 2.4, aggroRange: 12, explodes: true },
 };
 
@@ -158,7 +158,15 @@ export class Mob {
     if (this.health <= 0) this.alive = false;
   }
 
-  update(dt, world, player) {
+  update(dt, world, player, isNight) {
+    if (this.def.undead && !isNight && this.alive) {
+      this._burnTimer = (this._burnTimer || 0) + dt;
+      if (this._burnTimer >= 1) {
+        this._burnTimer = 0;
+        this.takeDamage(2, null);
+      }
+    }
+
     const toPlayer = new THREE.Vector3(player.position.x - this.position.x, 0, player.position.z - this.position.z);
     const distToPlayer = toPlayer.length();
 
@@ -250,7 +258,7 @@ export class MobManager {
   }
 
   update(dt, player, isNight, onDeath) {
-    for (const mob of this.mobs) mob.update(dt, this.world, player);
+    for (const mob of this.mobs) mob.update(dt, this.world, player, isNight);
 
     this.mobs = this.mobs.filter((mob) => {
       const dx = mob.position.x - player.position.x, dz = mob.position.z - player.position.z;

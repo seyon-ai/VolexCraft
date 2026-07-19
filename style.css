@@ -90,6 +90,21 @@ html, body {
 
 .menu-hint { font-size: 10px; opacity: 0.6; margin-top: 18px; line-height: 1.6; }
 
+#world-list { max-height: 40vh; overflow-y: auto; margin: 16px 0; display: flex; flex-direction: column; gap: 8px; }
+.world-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: rgba(255,255,255,0.05); border: 2px solid var(--stone-dark); padding: 10px 12px;
+  text-align: left; cursor: pointer;
+}
+.world-card:hover { background: rgba(255,255,255,0.09); }
+.world-card-name { font-weight: 700; font-size: 14px; }
+.world-card-meta { font-size: 10px; opacity: 0.65; margin-top: 3px; }
+.world-card-delete {
+  flex-shrink: 0; width: 28px; height: 28px; font-size: 13px; font-weight: 700;
+  background: rgba(217,79,79,0.25); color: var(--ink); border: 2px solid var(--stone-dark); cursor: pointer;
+}
+.world-card-delete:hover { background: rgba(217,79,79,0.5); }
+
 .click-hint {
   font-family: var(--pixel-font); font-size: 14px; color: var(--ink);
   background: rgba(0,0,0,0.5); padding: 16px 24px; border: 3px solid var(--stone-dark);
@@ -234,6 +249,14 @@ html, body {
   pointer-events: none; white-space: nowrap;
 }
 #toast.visible { opacity: 1; }
+
+#underwater-overlay {
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at center, rgba(30,90,160,0.18) 0%, rgba(15,60,120,0.42) 100%);
+  opacity: 0; transition: opacity 0.4s;
+  pointer-events: none;
+}
+#underwater-overlay.active { opacity: 1; }
 .hotbar-slot {
   width: 46px; height: 46px;
   background: rgba(20,16,10,0.75);

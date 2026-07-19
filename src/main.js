@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import { World } from './world.js';
+import { Biome } from './terrainGenerator.js';
 import { Player } from './player.js';
 import { GameModeManager, GameMode } from './gameMode.js';
 import { Inventory } from './inventory.js';
@@ -21,6 +22,7 @@ import { CRAFTING_RECIPES, SMELTING_RECIPES, craftOnce, smeltOnce } from './craf
 import { GraphicsSettings, WorldSettings, isMobileDevice, GraphicsPreset, GRAPHICS_PRESETS } from './settings.js';
 import { hashStringSeed } from './utils.js';
 import { PostProcessing } from './postprocessing.js';
+import { WeatherSystem } from './weather.js';
 
 const BREAK_TIME_SURVIVAL = 0.35; // seconds to break a block by hand in Survival
 const CREATIVE_BREAK_INTERVAL = 0.15; // seconds between breaks while held in Creative (rate cap, not instant-infinite)
@@ -39,6 +41,7 @@ class Game {
     this._initBlockOutline();
     this._raycaster = new THREE.Raycaster();
     this.postFX = new PostProcessing(this.renderer, this.scene, this.camera);
+    this.weatherSystem = new WeatherSystem(this.scene);
     this._fpsHistory = [];
     this._adaptiveQualityCooldown = 0;
 
@@ -64,8 +67,9 @@ class Game {
 
     window.addEventListener('resize', () => this._onResize());
     this.ui.bindMenuButtons({
-      onContinue: () => this._continueSavedWorld(),
-      onNewWorld: (seed, mode) => this._startNewWorld(seed, mode),
+      onShowCreateWorld: () => this.ui.showCreateWorldOverlay(),
+      onCreateWorldConfirm: (name, seedText, mode) => this._confirmCreateWorld(name, seedText, mode),
+      onCancelCreateWorld: () => this.ui.hideCreateWorldOverlay(),
       onResume: () => this._resume(),
       onSaveQuit: () => this._saveAndQuit(),
       onRespawn: () => this._respawnPlayer(),
@@ -77,7 +81,9 @@ class Game {
       onFogChange: (v) => this._setFog(v),
       onSensitivityChange: (v) => this._setSensitivity(v),
       onGraphicsPresetChange: (key) => this._applyGraphicsPreset(key),
+      onForceToggleChange: (v) => { this.forceGraphicsQuality = v; },
     });
+    this.forceGraphicsQuality = false;
     if (this.mobile) this.ui.hideExtremePresetOption();
 
     this.ui.bindHotbarSelection((index) => {
@@ -88,13 +94,14 @@ class Game {
     this.ui.bindFurnaceClose(() => this._closePanel());
     this.ui.bindInventoryOpen(() => this._openInventoryScreen());
     this.ui.bindInventoryClose(() => this._closePanel());
+    this.ui.bindDropSelected(() => this._dropSelectedItem());
     this.ui.dom.fullscreenBtn.addEventListener('click', () => this._toggleFullscreen());
 
     document.addEventListener('keydown', (e) => {
       if (e.code === 'F3') { this._debugVisible = !this._debugVisible; this.ui.dom.debugPanel.classList.toggle('visible', this._debugVisible); }
     });
 
-    this.ui.showMainMenu({ hasSave: SaveSystem.hasSave() });
+    this._refreshMainMenu();
   }
 
   _initRenderer() {
@@ -130,23 +137,34 @@ class Game {
 
   // ---------------- world lifecycle ----------------
 
-  _startNewWorld(seedText, modeStr) {
-    SaveSystem.clear();
+  _refreshMainMenu() {
+    const worlds = SaveSystem.listWorlds();
+    this.ui.showMainMenu(worlds, (id) => this._playWorld(id), (id) => this._deleteWorldPrompt(id));
+  }
+
+  _confirmCreateWorld(nameText, seedText, modeStr) {
+    const name = nameText.trim().length > 0 ? nameText.trim().slice(0, 32) : 'New World';
     const seed = seedText && seedText.trim().length > 0
       ? hashStringSeed(seedText.trim())
       : (Math.random() * 0xffffffff) >>> 0;
-    this._buildWorld(seed, modeStr === 'creative' ? GameMode.CREATIVE : GameMode.SURVIVAL);
+    const gameMode = modeStr === 'creative' ? GameMode.CREATIVE : GameMode.SURVIVAL;
 
-    const spawnX = 0, spawnZ = 0;
-    const spawnY = this.world.getHeightAt(spawnX, spawnZ) + 2;
-    this.player.position.set(spawnX + 0.5, spawnY, spawnZ + 0.5);
+    const entry = SaveSystem.createWorldEntry({ name, seed, gameMode });
+    this.worldId = entry.id;
+    this.ui.hideCreateWorldOverlay();
+
+    this._buildWorld(seed, gameMode);
+    const spawn = this._pickSafeSpawn();
+    this.player.position.set(spawn.x + 0.5, spawn.y + 2, spawn.z + 0.5);
     this.timeSystem.setTime(0.3);
+    SaveSystem.save(this); // persist immediately so it shows up correctly if the tab closes right away
     this._afterWorldReady();
   }
 
-  _continueSavedWorld() {
-    const data = SaveSystem.load();
-    if (!data) return this._startNewWorld('', 'survival');
+  _playWorld(id) {
+    const data = SaveSystem.load(id);
+    if (!data) { this._refreshMainMenu(); return; } // stale index entry with no data — just refresh the list
+    this.worldId = id;
 
     this._buildWorld(data.seed, data.gameMode === 'creative' ? GameMode.CREATIVE : GameMode.SURVIVAL);
     this.world.loadModifications(data.modifications || []);
@@ -165,7 +183,32 @@ class Game {
       this._setShadows(data.graphics.shadows);
       this._setFog(data.graphics.fog);
     }
+    SaveSystem.touchWorld(id);
     this._afterWorldReady();
+  }
+
+  _deleteWorldPrompt(id) {
+    const worlds = SaveSystem.listWorlds();
+    const entry = worlds.find((w) => w.id === id);
+    if (!entry) return;
+    if (!window.confirm(`Delete "${entry.name}"? This can't be undone.`)) return;
+    SaveSystem.deleteWorld(id);
+    this._refreshMainMenu();
+  }
+
+  /** Picks a random spawn point, retrying a few times to avoid spawning in
+   * open ocean — "safety without breaking anything": falls back to (0,0)
+   * if every attempt happens to land in water (astronomically unlikely). */
+  _pickSafeSpawn() {
+    const gen = this.world.terrainGenerator;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const x = Math.floor((Math.random() - 0.5) * 1000);
+      const z = Math.floor((Math.random() - 0.5) * 1000);
+      const height = gen.getHeight(x, z);
+      const biome = gen.getBiome(x, z, height);
+      if (biome !== Biome.OCEAN) return { x, z, y: height };
+    }
+    return { x: 0, z: 0, y: gen.getHeight(0, 0) };
   }
 
   _buildWorld(seed, mode) {
@@ -258,7 +301,7 @@ class Game {
     this.running = false;
     this.ui.hidePause();
     if (this.mobile) this.ui.showMobileControls(false);
-    this.ui.showMainMenu({ hasSave: true });
+    this._refreshMainMenu();
   }
 
   _setShadows(v) {
@@ -387,6 +430,37 @@ class Game {
     this._setMobileControlsVisible(true);
   }
 
+  /** Overrides fog to a short blue underwater look while submerged, restoring
+   * whatever fog state (including "no fog" if the preset disabled it) existed
+   * before. Must run AFTER timeSystem.update(), which recolors fog for
+   * day/night every frame and would otherwise instantly undo this. */
+  _updateUnderwaterFog(isUnderwater) {
+    if (isUnderwater) {
+      if (!this._wasUnderwater) {
+        this._preUnderwaterFog = this.scene.fog
+          ? { color: this.scene.fog.color.clone(), near: this.scene.fog.near, far: this.scene.fog.far }
+          : null;
+      }
+      if (!this.scene.fog) this.scene.fog = new THREE.Fog(0x0a3a66, 0.1, 14);
+      else { this.scene.fog.color.set(0x0a3a66); this.scene.fog.near = 0.1; this.scene.fog.far = 14; }
+      this._wasUnderwater = true;
+    } else if (this._wasUnderwater) {
+      this.scene.fog = this._preUnderwaterFog
+        ? new THREE.Fog(this._preUnderwaterFog.color.getHex(), this._preUnderwaterFog.near, this._preUnderwaterFog.far)
+        : null;
+      this._wasUnderwater = false;
+    }
+  }
+
+  _updateWeather(dt) {
+    const p = this.player.position;
+    const height = this.world.getHeightAt(p.x, p.z);
+    const biome = this.world.terrainGenerator.getBiome(Math.floor(p.x), Math.floor(p.z), height);
+    this.weatherSystem.update(dt, p, biome === Biome.SNOWY_PLAINS || biome === Biome.MOUNTAINS);
+    const flash = this.weatherSystem.getLightningFlash();
+    if (flash > 0) this.timeSystem.ambientLight.intensity += flash * 1.8;
+  }
+
   _updateWaterUniforms() {
     const mat = this.world.waterMaterial;
     mat.uniforms.time.value = this.clock.elapsedTime;
@@ -427,6 +501,7 @@ class Game {
    * Only ever downgrades automatically — never auto-upgrades, to avoid
    * flip-flopping; the player can always manually pick a higher preset again. */
   _updateAdaptiveQuality(dt) {
+    if (this.forceGraphicsQuality) return; // user explicitly locked graphics quality
     this._adaptiveQualityCooldown -= dt;
     if (this._adaptiveQualityCooldown > 0) return;
     if (this._fpsHistory.length < 10) return;
@@ -471,6 +546,8 @@ class Game {
       }
     }
 
+    this.ui.setUnderwaterOverlay(this.player.isUnderwater);
+
     this.camera.position.copy(this.player.getEyePosition());
     this.camera.rotation.y = yaw;
     this.camera.rotation.x = pitch;
@@ -478,7 +555,9 @@ class Game {
 
     this.world.update(this.player.position.x, this.player.position.z);
     this.timeSystem.update(dt, this.player.position);
+    this._updateUnderwaterFog(this.player.isUnderwater);
     this._updateWaterUniforms();
+    this._updateWeather(dt);
     this.player.gameModeCanTakeDamage = this.gameMode.canTakeDamage();
     this.mobManager.update(dt, this.player, this.timeSystem.isNight(), (mob) => {
       if (this.gameMode.isSurvival() && mob.def.drop) {
@@ -542,17 +621,24 @@ class Game {
 
     const mobTarget = this.mobManager.findAttackTarget(origin, facing, ATTACK_RANGE);
 
-    if (mobTarget && input.breakHeld) {
+    if (mobTarget) {
+      // Attacking takes full priority over breaking/placing: a quick tap
+      // (natural "hit" gesture on mobile) or a held press both land a hit,
+      // rate-limited by cooldown. We never fall through to block/eat logic
+      // while a mob is targeted — you can't place into where a mob stands.
       this._breakProgress = 0;
       this._breakFraction = 0;
       this._breakTargetKey = null;
-      if (this._attackCooldownTimer <= 0) {
+      if ((input.breakHeld || input.placePressed) && this._attackCooldownTimer <= 0) {
         const dmg = weaponDamage(this.inventory.getSelectedBlockId());
         const knock = mobTarget.position.clone().sub(this.player.position).setY(0).normalize();
         mobTarget.takeDamage(dmg, knock);
         this._attackCooldownTimer = ATTACK_COOLDOWN;
       }
-    } else if (hit && input.breakHeld && !isUnbreakable(hit.blockId)) {
+      return;
+    }
+
+    if (hit && input.breakHeld && !isUnbreakable(hit.blockId)) {
       const key = hit.position.join(',');
       const interval = this.gameMode.breaksInstantly() ? CREATIVE_BREAK_INTERVAL : BREAK_TIME_SURVIVAL;
       if (key !== this._breakTargetKey) { this._breakTargetKey = key; this._breakProgress = 0; }
@@ -580,6 +666,20 @@ class Game {
         else this._placeBlock(hit);
       }
     }
+  }
+
+  _dropSelectedItem() {
+    if (!this.running || this.paused || this._openPanel === 'crafting' || this._openPanel === 'furnace') return;
+    const slot = this.inventory.getSelectedSlot();
+    if (!slot) return;
+    const id = slot.id;
+    if (!this.inventory.consumeSelected()) return;
+    const yaw = this.controls.yaw;
+    const dx = -Math.sin(yaw) * 1.2;
+    const dz = -Math.cos(yaw) * 1.2;
+    const pos = new THREE.Vector3(this.player.position.x + dx, this.player.position.y + 1.0, this.player.position.z + dz);
+    this.droppedItemManager.spawn(id, 1, pos);
+    if (this._openPanel === 'inventory') this._renderInventoryScreen();
   }
 
   _eatSelected() {

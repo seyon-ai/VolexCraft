@@ -2,6 +2,28 @@
 
 A browser-based voxel game (Three.js, ES modules, no build step, no backend).
 
+## What's new in V7
+
+**Bug fixes**
+- **Items "not switchable" / hotbar seemingly dead:** found the real cause — `isTypingInInput()` only checked an element's tag, not whether it was actually visible. Visiting any menu with a `<select>`/`<input>` (graphics preset dropdown, seed field, etc.) could leave that element focused even after its menu closed (`display:none` doesn't always blur focus), which silently blocked *all* keyboard input — hotbar number keys, E, M, Q — forever after. Fixed to check visibility too, and menus now also explicitly blur on close as a second layer of defense.
+- **"Items in inventory is not droppable":** the Drop button in the Inventory screen existed in the HTML and was fully implemented in the UI layer — it just was never actually wired to an action. One missing line. Also added `Q` as a desktop shortcut to drop the selected item directly.
+- **"Beating mobs places blocks instead":** attacking only triggered on a *held* press. A quick tap (the natural way to "hit" something on mobile) fell through to the place/eat logic instead, since it never crossed the hold threshold. Targeting a mob now takes full priority — a tap or a hold both land a hit, and placing/eating is skipped entirely while a mob is targeted.
+- **Zombies/skeletons surviving in daylight:** they didn't have any daylight interaction at all before. Added the expected mechanic — undead mobs take periodic damage in daylight and die if they don't reach shade in time (shade itself isn't modeled — see simplifications).
+
+**New: real Minecraft-style world management**
+- The main menu now shows a real list of your worlds (name, seed, mode, last played) instead of a single "Continue" slot — click one to resume it, or the ✕ to delete it (with a confirmation).
+- "Create New World" now asks for a world **name**, an optional **seed** (leave blank for a genuinely random one), and game mode.
+- Spawn point is now randomized per world instead of always being (0,0) — with a safety check that retries a few times if the random spot lands in open ocean, falling back to (0,0) only if that somehow keeps happening.
+- Save data moved from a single `localStorage` slot to one entry per world plus a small index, so multiple worlds coexist properly.
+
+**New: Force Graphics Quality toggle** — off by default. When enabled, the adaptive-quality system (which auto-lowers your preset if FPS sags) is completely disabled, so your manually-chosen preset always stays put.
+
+**New: underwater feel** — swimming now has real water resistance (movement and gravity both slow down, jump becomes a gentle swim-up impulse instead), plus a blue screen tint and short blue fog while your camera is submerged, both clearing smoothly when you surface.
+
+**New: weather** — rain, snow, and thunderstorms with periodic lightning flashes, all tied to the graphics preset toggle. Snow rolls in snowy/mountain biomes, rain/thunder elsewhere. Wired into the visual pipeline from the last update, continuing next: cloud billboards and the sky flourishes (shooting stars, aurora) are still to come.
+
+**Known simplification worth flagging:** the daylight-burn mechanic doesn't check for actual shade/shelter — any undead mob out during the day takes damage regardless of whether it's standing under a roof. A fully correct version would need a sunlight-visibility raycast per mob per damage tick; skipped for now as a reasonable trade-off.
+
 ## What's new in V6 (Voltx Craft visual pipeline, part 1)
 
 **Real post-processing pipeline** (`src/postprocessing.js`) — built on Three.js's own `examples/jsm` addons (EffectComposer/RenderPass/UnrealBloomPass/SSAOPass/ShaderPass/OutputPass), not hand-rolled fakes:

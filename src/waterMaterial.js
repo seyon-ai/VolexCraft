@@ -50,15 +50,20 @@ const fragmentShader = `
     vec4 tex = texture2D(map, distortedUv);
 
     vec3 viewDir = normalize(cameraPosition - vWorldPos);
-    float fresnel = pow(1.0 - max(dot(viewDir, vNormal), 0.0), 3.0);
+    float fresnel = pow(1.0 - max(dot(viewDir, vNormal), 0.0), 2.2);
+    // Reflectivity never drops to zero even head-on, so it reads as a clean
+    // glossy surface instead of see-through water at every angle.
+    float reflectivity = clamp(0.42 + fresnel * 0.52, 0.0, 0.95);
 
-    vec3 base = mix(deepColor, shallowColor, 0.4) * tex.rgb * 1.4;
-    vec3 withReflectionTint = mix(base, skyColor, fresnel * 0.65);
+    vec3 tinted = mix(deepColor, shallowColor, 0.35);
+    vec3 base = mix(tinted, tinted * tex.rgb * 1.15, 0.3); // subtle texture, kept from looking muddy
+    vec3 skyReflect = skyColor * 1.1;
+    vec3 color = mix(base, skyReflect, reflectivity);
 
-    float sunGlint = pow(max(dot(reflect(-sunDirection, vNormal), viewDir), 0.0), 60.0);
-    withReflectionTint += vec3(1.0, 0.95, 0.8) * sunGlint * sunIntensity;
+    float sunGlint = pow(max(dot(reflect(-sunDirection, vNormal), viewDir), 0.0), 90.0);
+    color += vec3(1.0, 0.97, 0.85) * sunGlint * sunIntensity * 1.4;
 
-    gl_FragColor = vec4(withReflectionTint, opacity);
+    gl_FragColor = vec4(color, opacity);
   }
 `;
 
@@ -72,7 +77,7 @@ export function createWaterMaterial(atlasTexture) {
       deepColor: { value: new THREE.Color(0x0e3a66) },
       shallowColor: { value: new THREE.Color(0x2f7fc1) },
       skyColor: { value: new THREE.Color(0x8fd0f0) },
-      opacity: { value: 0.82 },
+      opacity: { value: 0.93 },
     },
     transparent: true,
     depthWrite: false,
@@ -83,5 +88,5 @@ export function createWaterMaterial(atlasTexture) {
 
 /** Cheap non-shader fallback (Low preset). */
 export function createSimpleWaterMaterial(atlasTexture) {
-  return new THREE.MeshLambertMaterial({ map: atlasTexture, transparent: true, opacity: 0.75, depthWrite: false });
+  return new THREE.MeshLambertMaterial({ map: atlasTexture, transparent: true, opacity: 0.88, depthWrite: false });
 }

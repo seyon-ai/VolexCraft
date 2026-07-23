@@ -2,6 +2,18 @@
 
 A browser-based voxel game (Three.js, ES modules, no build step, no backend).
 
+## What's new in V8
+
+- **Clouds** with two distinct styles: soft white for clear/rain, darker and denser during thunderstorms — swaps automatically with the weather.
+- **Milky Way band + shooting stars + occasional aurora** at night (all tested, including a real shooting-star trigger over a simulated 50s window).
+- **Water is now cleaner and more reflective**, not flat/transparent: stronger base reflectivity even head-on (not just at grazing angles), less muddy texture blending, brighter sky-tint, sharper sun glint, higher opacity.
+- **Night is brighter on high graphics** — ambient/moonlight floors raised so shadows/SSAO don't crush it to near-black.
+- **Punchier "cinematic" look** — stronger bloom, higher saturation/contrast, slightly brighter exposure.
+- **Mobs flash red when hit** — verified the flash triggers and correctly reverts to original color after ~150ms.
+- **Inventory reworked to real pick-up/place**: tap a slot to pick it up, tap another to swap them in — so grabbing a crafting table out of a full inventory and swapping it into a hotbar slot now just works. Tested directly.
+- **Hold a slot to drop it** — works on any slot (hotbar or backpack), not just the selected one; `Q` still drops the selected hotbar item too.
+- **Inventory button moved** from the top bar to a `[...]` button beside the hotbar.
+
 ## What's new in V7
 
 **Bug fixes**

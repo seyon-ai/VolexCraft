@@ -128,6 +128,7 @@ html, body {
 }
 .inv-slot.filled { background-color: var(--swatch-color, #999); background-image: var(--swatch-image, none); background-size: cover; background-position: center; }
 .inv-slot.selected { box-shadow: 0 0 0 2px var(--grass); }
+.inv-slot.held { box-shadow: 0 0 0 2px #f0c020; transform: scale(0.94); }
 .inv-slot .inv-count { position: absolute; bottom: 1px; right: 2px; font-size: 9px; font-weight: 700; text-shadow: 1px 1px 0 #000; }
 .inv-section-title { font-size: 13px; margin: 14px 0 4px; text-align: left; opacity: 0.85; }
 
@@ -235,11 +236,20 @@ html, body {
 }
 #debug-panel.visible { display: block; }
 
-#hotbar {
+#hotbar-row {
   position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
-  display: flex; gap: 4px;
+  display: flex; align-items: center; gap: 8px;
   pointer-events: auto;
 }
+#hotbar { display: flex; gap: 4px; }
+.hotbar-more-btn {
+  width: 34px; height: 46px;
+  font-family: var(--body-font); font-weight: 700; font-size: 11px; letter-spacing: -1px; color: var(--ink);
+  background: rgba(20,16,10,0.75); border: 2px solid var(--stone-dark);
+  box-shadow: inset 1px 1px 0 rgba(255,255,255,0.15), inset -2px -2px 0 rgba(0,0,0,0.4);
+  cursor: pointer;
+}
+.hotbar-more-btn:active { box-shadow: inset -1px -1px 0 rgba(255,255,255,0.1), inset 2px 2px 0 rgba(0,0,0,0.4); }
 
 #toast {
   position: absolute; bottom: 88px; left: 50%; transform: translateX(-50%);

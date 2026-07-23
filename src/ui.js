@@ -259,18 +259,26 @@ export class UI {
    * its contents with the currently-selected hotbar slot (a simple one-click
    * "quick move" in place of full drag-and-drop).
    */
-  renderInventoryScreen(inventory, onSlotClick) {
-    this._renderInvGrid(this.dom.inventoryBackpackGrid, inventory, 9, inventory.slots.length, onSlotClick);
-    this._renderInvGrid(this.dom.inventoryHotbarRow, inventory, 0, 9, onSlotClick);
+  /**
+   * Renders the backpack grid + a hotbar preview row. Tapping a slot either
+   * "picks it up" (first tap) or swaps it with whichever slot was picked up
+   * (second tap) — a simple two-click swap in place of full drag-and-drop.
+   * Holding a slot instead drops that item straight into the world.
+   */
+  renderInventoryScreen(inventory, heldIndex, onSlotClick, onSlotHold) {
+    this._renderInvGrid(this.dom.inventoryBackpackGrid, inventory, 9, inventory.slots.length, heldIndex, onSlotClick, onSlotHold);
+    this._renderInvGrid(this.dom.inventoryHotbarRow, inventory, 0, 9, heldIndex, onSlotClick, onSlotHold);
   }
 
-  _renderInvGrid(container, inventory, startIndex, endIndex, onSlotClick) {
+  _renderInvGrid(container, inventory, startIndex, endIndex, heldIndex, onSlotClick, onSlotHold) {
+    const HOLD_MS = 450;
     container.innerHTML = '';
     for (let i = startIndex; i < endIndex; i++) {
       const slot = inventory.slots[i];
       const el = document.createElement('div');
       el.className = 'inv-slot';
       if (i === inventory.selectedIndex) el.classList.add('selected');
+      if (i === heldIndex) el.classList.add('held');
       if (slot) {
         el.classList.add('filled');
         applyIconStyle(el, slot.id);
@@ -282,7 +290,19 @@ export class UI {
           el.appendChild(count);
         }
       }
-      el.addEventListener('click', () => onSlotClick(i));
+
+      let holdTimer = null;
+      let firedHold = false;
+      el.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        firedHold = false;
+        holdTimer = setTimeout(() => { firedHold = true; onSlotHold(i); }, HOLD_MS);
+      });
+      const cancelHold = () => clearTimeout(holdTimer);
+      el.addEventListener('pointerup', () => { cancelHold(); if (!firedHold) onSlotClick(i); });
+      el.addEventListener('pointerleave', cancelHold);
+      el.addEventListener('pointercancel', cancelHold);
+
       container.appendChild(el);
     }
   }

@@ -23,9 +23,9 @@ import * as THREE from 'three';
 const ColorGradeShader = {
   uniforms: {
     tDiffuse: { value: null },
-    vignette: { value: 0.35 },
-    saturation: { value: 1.08 },
-    contrast: { value: 1.05 },
+    vignette: { value: 0.32 },
+    saturation: { value: 1.22 },
+    contrast: { value: 1.14 },
   },
   vertexShader: `
     varying vec2 vUv;
@@ -83,7 +83,7 @@ export class PostProcessing {
       composer.addPass(new RenderPass(this.scene, this.camera));
 
       this.bloomPass = new UnrealBloomPass(
-        new THREE.Vector2(window.innerWidth, window.innerHeight), 0.5, 0.6, 0.85
+        new THREE.Vector2(window.innerWidth, window.innerHeight), 0.75, 0.55, 0.72
       );
       composer.addPass(this.bloomPass);
 

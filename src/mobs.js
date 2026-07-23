@@ -93,6 +93,17 @@ function buildMobMesh(def, kind) {
   return group;
 }
 
+/** Every material on a mob's mesh that has a tintable .color (used for the red damage flash). */
+function collectFlashableMaterials(group) {
+  const mats = [];
+  group.traverse((obj) => {
+    if (!obj.material) return;
+    const list = Array.isArray(obj.material) ? obj.material : [obj.material];
+    for (const m of list) if (m.color) mats.push(m);
+  });
+  return mats;
+}
+
 export class Mob {
   constructor(kind, position, scene) {
     this.kind = kind;
@@ -111,6 +122,10 @@ export class Mob {
     this.mesh = buildMobMesh(this.def, kind);
     this.mesh.position.copy(this.position);
     scene.add(this.mesh);
+
+    this._flashMaterials = collectFlashableMaterials(this.mesh);
+    this._flashOriginalColors = this._flashMaterials.map((m) => m.color.clone());
+    this._flashTimer = 0;
   }
 
   getAABB(pos = this.position) {
@@ -155,6 +170,8 @@ export class Mob {
       this.velocity.z += knockbackDir.z * 5;
       this.velocity.y = Math.max(this.velocity.y, 4);
     }
+    this._flashTimer = 0.15;
+    for (const m of this._flashMaterials) m.color.setHex(0xff3333);
     if (this.health <= 0) this.alive = false;
   }
 
@@ -236,6 +253,13 @@ export class Mob {
     if (this.fuseActive) {
       const pulse = 1 + Math.sin(performance.now() * 0.02) * 0.08;
       this.mesh.scale.setScalar(pulse);
+    }
+
+    if (this._flashTimer > 0) {
+      this._flashTimer -= dt;
+      if (this._flashTimer <= 0) {
+        this._flashMaterials.forEach((m, i) => m.color.copy(this._flashOriginalColors[i]));
+      }
     }
   }
 

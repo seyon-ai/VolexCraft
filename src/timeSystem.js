@@ -126,9 +126,9 @@ export class TimeSystem {
     const dayFactor = clamp((sunHeight + 0.15) / 0.35, 0, 1); // 0 at horizon-ish, 1 once well up
     const duskDawnFactor = 1 - Math.abs(clamp(sunHeight / 0.35, -1, 1));
 
-    this.sunLight.intensity = lerp(0.0, 1.15, clamp((sunHeight + 0.05) / 0.5, 0, 1));
-    this.moonLight.intensity = lerp(0.28, 0.0, clamp((sunHeight + 0.3) / 0.3, 0, 1));
-    this.ambientLight.intensity = lerp(0.18, 0.65, dayFactor);
+    this.sunLight.intensity = lerp(0.0, 1.2, clamp((sunHeight + 0.05) / 0.5, 0, 1));
+    this.moonLight.intensity = lerp(0.42, 0.0, clamp((sunHeight + 0.3) / 0.3, 0, 1));
+    this.ambientLight.intensity = lerp(0.32, 0.68, dayFactor);
 
     let sky = mixColor(NIGHT_SKY, DAY_SKY, dayFactor);
     if (duskDawnFactor > 0.15) {

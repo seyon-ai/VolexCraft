@@ -22,7 +22,9 @@ import { CRAFTING_RECIPES, SMELTING_RECIPES, craftOnce, smeltOnce } from './craf
 import { GraphicsSettings, WorldSettings, isMobileDevice, GraphicsPreset, GRAPHICS_PRESETS } from './settings.js';
 import { hashStringSeed } from './utils.js';
 import { PostProcessing } from './postprocessing.js';
-import { WeatherSystem } from './weather.js';
+import { WeatherSystem, WeatherType } from './weather.js';
+import { CloudSystem } from './clouds.js';
+import { SkyFlourishes } from './skyFlourishes.js';
 
 const BREAK_TIME_SURVIVAL = 0.35; // seconds to break a block by hand in Survival
 const CREATIVE_BREAK_INTERVAL = 0.15; // seconds between breaks while held in Creative (rate cap, not instant-infinite)
@@ -42,6 +44,8 @@ class Game {
     this._raycaster = new THREE.Raycaster();
     this.postFX = new PostProcessing(this.renderer, this.scene, this.camera);
     this.weatherSystem = new WeatherSystem(this.scene);
+    this.cloudSystem = new CloudSystem(this.scene);
+    this.skyFlourishes = new SkyFlourishes(this.scene);
     this._fpsHistory = [];
     this._adaptiveQualityCooldown = 0;
 
@@ -59,7 +63,8 @@ class Game {
     this._breakTargetKey = null;
     this._breakFraction = 0;
     this._attackCooldownTimer = 0;
-    this._openPanel = null; // 'crafting' | 'furnace' | null
+    this._openPanel = null; // 'crafting' | 'furnace' | 'inventory' | null
+    this._heldInventorySlot = null;
     this._fpsAccum = 0;
     this._fpsFrames = 0;
     this._fps = 0;
@@ -111,7 +116,7 @@ class Game {
     this.renderer.shadowMap.enabled = GraphicsSettings.shadows;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.15;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     document.getElementById('canvas-container').appendChild(this.renderer.domElement);
 
@@ -339,6 +344,7 @@ class Game {
 
     if (this.weatherSystem) this.weatherSystem.setEnabled(preset.weather);
     if (this.cloudSystem) this.cloudSystem.setCount(preset.clouds);
+    if (this.skyFlourishes) this.skyFlourishes.setEnabled(preset.weather);
     if (this.timeSystem) this.timeSystem.setStarCount?.(preset.starCount);
 
     if (this.ui.setGraphicsPresetValue) this.ui.setGraphicsPresetValue(key);
@@ -351,6 +357,7 @@ class Game {
   _openInventoryScreen() {
     if (!this.running || this.paused || this._openPanel) return;
     this._openPanel = 'inventory';
+    this._heldInventorySlot = null;
     this._renderInventoryScreen();
     this.ui.showInventoryPanel();
     if (!this.mobile) document.exitPointerLock();
@@ -358,7 +365,12 @@ class Game {
   }
 
   _renderInventoryScreen() {
-    this.ui.renderInventoryScreen(this.inventory, (i) => this._onInventorySlotClick(i));
+    this.ui.renderInventoryScreen(
+      this.inventory,
+      this._heldInventorySlot ?? null,
+      (i) => this._onInventorySlotClick(i),
+      (i) => this._onInventorySlotHold(i)
+    );
     this.ui.renderRecipeList(this.ui.dom.inventoryCraftingList, CRAFTING_RECIPES, this.inventory, 'Craft', (recipe) => {
       if (craftOnce(this.inventory, recipe)) this._renderInventoryScreen();
     });
@@ -366,12 +378,27 @@ class Game {
 
   _onInventorySlotClick(index) {
     if (this.gameMode.isCreative()) return; // creative slots are fixed infinite stacks
-    const sel = this.inventory.selectedIndex;
-    if (index === sel) return;
-    const tmp = this.inventory.slots[sel];
-    this.inventory.slots[sel] = this.inventory.slots[index];
-    this.inventory.slots[index] = tmp;
+    if (this._heldInventorySlot == null) {
+      if (!this.inventory.slots[index]) return; // nothing there to pick up
+      this._heldInventorySlot = index;
+    } else if (this._heldInventorySlot === index) {
+      this._heldInventorySlot = null; // tapped the same slot again — cancel pick-up
+    } else {
+      const a = this._heldInventorySlot, b = index;
+      const tmp = this.inventory.slots[a];
+      this.inventory.slots[a] = this.inventory.slots[b];
+      this.inventory.slots[b] = tmp;
+      this._heldInventorySlot = null;
+    }
     this._renderInventoryScreen();
+  }
+
+  _onInventorySlotHold(index) {
+    if (this.gameMode.isCreative()) return;
+    if (this._dropFromSlot(index)) {
+      if (this._heldInventorySlot === index) this._heldInventorySlot = null;
+      this._renderInventoryScreen();
+    }
   }
 
   _openCraftingPanel() {
@@ -459,6 +486,10 @@ class Game {
     this.weatherSystem.update(dt, p, biome === Biome.SNOWY_PLAINS || biome === Biome.MOUNTAINS);
     const flash = this.weatherSystem.getLightningFlash();
     if (flash > 0) this.timeSystem.ambientLight.intensity += flash * 1.8;
+
+    this.cloudSystem.setStormy(this.weatherSystem.type === WeatherType.THUNDER);
+    this.cloudSystem.update(dt, p);
+    this.skyFlourishes.update(dt, this.timeSystem.isNight(), p);
   }
 
   _updateWaterUniforms() {
@@ -668,18 +699,31 @@ class Game {
     }
   }
 
-  _dropSelectedItem() {
-    if (!this.running || this.paused || this._openPanel === 'crafting' || this._openPanel === 'furnace') return;
-    const slot = this.inventory.getSelectedSlot();
-    if (!slot) return;
+  /** Removes one item from an arbitrary inventory slot and spawns it as a
+   * physical pickup in front of the player. Used by both the Q-key shortcut
+   * (drops the selected hotbar slot) and holding a slot in the Inventory
+   * screen (drops that specific slot, hotbar or backpack). */
+  _dropFromSlot(index) {
+    const slot = this.inventory.slots[index];
+    if (!slot) return false;
     const id = slot.id;
-    if (!this.inventory.consumeSelected()) return;
+    if (!this.gameMode.isCreative()) {
+      slot.count -= 1;
+      if (slot.count <= 0) this.inventory.slots[index] = null;
+    }
     const yaw = this.controls.yaw;
     const dx = -Math.sin(yaw) * 1.2;
     const dz = -Math.cos(yaw) * 1.2;
     const pos = new THREE.Vector3(this.player.position.x + dx, this.player.position.y + 1.0, this.player.position.z + dz);
     this.droppedItemManager.spawn(id, 1, pos);
-    if (this._openPanel === 'inventory') this._renderInventoryScreen();
+    return true;
+  }
+
+  _dropSelectedItem() {
+    if (!this.running || this.paused || this._openPanel === 'crafting' || this._openPanel === 'furnace') return;
+    if (this._dropFromSlot(this.inventory.selectedIndex) && this._openPanel === 'inventory') {
+      this._renderInventoryScreen();
+    }
   }
 
   _eatSelected() {
